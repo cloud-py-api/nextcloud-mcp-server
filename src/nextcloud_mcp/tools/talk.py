@@ -51,7 +51,15 @@ def _format_conversation(room: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _format_message(msg: dict[str, Any]) -> dict[str, Any]:
+def _format_message_compact(msg: dict[str, Any]) -> str:
+    """Format a message as a compact single line: [id] author: text."""
+    msg_id = msg.get("id", 0)
+    author = msg.get("actorDisplayName", "unknown")
+    text = msg.get("message", "")
+    return f"[{msg_id}] {author}: {text}"
+
+
+def _format_message_full(msg: dict[str, Any]) -> dict[str, Any]:
     """Extract the most useful fields from a raw message object."""
     return {
         "id": msg["id"],
@@ -123,32 +131,56 @@ def _register_read_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     @require_permission(PermissionLevel.READ)
-    async def get_messages(token: str, limit: int = 100, look_into_future: bool = False) -> str:
+    async def get_messages(
+        token: str,
+        limit: int = 50,
+        before_message_id: int = 0,
+        include_system: bool = False,
+    ) -> str:
         """Get chat messages from a Talk conversation.
 
-        Returns messages in reverse chronological order (newest first) by default.
-        System messages (e.g., "User joined") are included but clearly marked.
+        Returns messages in reverse chronological order (newest first).
+        Uses a compact format: "[id] author: message text" — one line per message.
+
+        IMPORTANT: Start with a small limit (20-50). If you need more context,
+        use before_message_id with the oldest message ID from the previous call
+        to paginate backwards through the history.
 
         Args:
             token: The conversation token. Use list_conversations to find tokens.
-            limit: Maximum number of messages to return (1-200, default: 100).
-            look_into_future: If true, poll for new messages from the last known
-                              message (default: false — returns most recent messages).
+            limit: Maximum number of messages to return (1-200, default: 50).
+                   Start small to avoid exceeding response size limits.
+            before_message_id: Fetch messages older than this message ID (for pagination).
+                               Use the smallest message ID from a previous call.
+                               Default 0 means start from the newest message.
+            include_system: Include system messages like "User joined",
+                            "Conversation created" (default: false — only chat messages).
 
         Returns:
-            JSON list of message objects, each with: id, actor_display_name,
-            message, timestamp, message_type, system_message, is_replyable.
+            Compact text with one message per line: "[id] author: message".
+            The last line shows pagination info if more messages may exist.
         """
         client = get_client()
         limit = max(1, min(200, limit))
-        params = {
-            "lookIntoFuture": "1" if look_into_future else "0",
+        params: dict[str, str] = {
+            "lookIntoFuture": "0",
             "limit": str(limit),
             "setReadMarker": "0",
         }
+        if before_message_id:
+            params["lastKnownMessageId"] = str(before_message_id)
         data = await client.ocs_get(f"apps/spreed/api/v1/chat/{token}", params=params)
-        messages = [_format_message(msg) for msg in data]
-        return json.dumps(messages, indent=2, default=str)
+
+        if not include_system:
+            data = [m for m in data if not m.get("systemMessage")]
+
+        lines = [_format_message_compact(msg) for msg in data]
+
+        if data:
+            oldest_id = min(m["id"] for m in data)
+            lines.append(f"\n--- {len(data)} messages. For older messages, call with before_message_id={oldest_id} ---")
+
+        return "\n".join(lines)
 
     @mcp.tool()
     @require_permission(PermissionLevel.READ)
@@ -193,7 +225,7 @@ def _register_write_tools(mcp: FastMCP) -> None:
         if reply_to:
             post_data["replyTo"] = reply_to
         data = await client.ocs_post(f"apps/spreed/api/v1/chat/{token}", data=post_data)
-        return json.dumps(_format_message(data), indent=2, default=str)
+        return json.dumps(_format_message_full(data), indent=2, default=str)
 
     @mcp.tool()
     @require_permission(PermissionLevel.WRITE)

@@ -6,6 +6,7 @@ permission checks, argument parsing, and JSON serialization.
 
 import contextlib
 import json
+import re
 from typing import Any
 
 import pytest
@@ -36,6 +37,18 @@ async def _send_msg(nc_mcp: McpTestHelper, token: str, message: str) -> dict[str
     """Send a message and return the parsed result."""
     result = await nc_mcp.call("send_message", token=token, message=message)
     return json.loads(result)
+
+
+def _parse_compact_messages(result: str) -> list[str]:
+    """Parse compact message lines, excluding the pagination footer."""
+    return [line for line in result.strip().split("\n") if line and not line.startswith("---")]
+
+
+def _extract_message_id(line: str) -> int:
+    """Extract the message ID from a compact line like '[123] admin: hello'."""
+    match = re.match(r"\[(\d+)\]", line)
+    assert match, f"Cannot extract message ID from: {line}"
+    return int(match.group(1))
 
 
 # ---------------------------------------------------------------------------
@@ -124,36 +137,32 @@ class TestGetConversation:
 
 
 # ---------------------------------------------------------------------------
-# get_messages
+# get_messages (compact format)
 # ---------------------------------------------------------------------------
 
 
 class TestGetMessages:
     @pytest.mark.asyncio
-    async def test_returns_messages_list(self, nc_mcp: McpTestHelper) -> None:
-        room = await _create_room(nc_mcp, "test-get-msgs")
+    async def test_returns_compact_format(self, nc_mcp: McpTestHelper) -> None:
+        room = await _create_room(nc_mcp, "test-compact")
         try:
             await _send_msg(nc_mcp, str(room["token"]), "hello world")
             result = await nc_mcp.call("get_messages", token=str(room["token"]))
-            data: list[Any] = json.loads(result)
-            assert isinstance(data, list)
-            assert len(data) >= 1
+            lines = _parse_compact_messages(result)
+            assert len(lines) >= 1
+            # Each line should match [id] author: message
+            assert re.match(r"\[\d+\] .+: .+", lines[0])
         finally:
             await _delete_room(nc_mcp, str(room["token"]))
 
     @pytest.mark.asyncio
-    async def test_message_has_required_fields(self, nc_mcp: McpTestHelper) -> None:
-        room = await _create_room(nc_mcp, "test-msg-fields")
+    async def test_message_content_in_compact_line(self, nc_mcp: McpTestHelper) -> None:
+        room = await _create_room(nc_mcp, "test-content")
         try:
-            await _send_msg(nc_mcp, str(room["token"]), "field test")
+            await _send_msg(nc_mcp, str(room["token"]), "specific test message")
             result = await nc_mcp.call("get_messages", token=str(room["token"]))
-            data = json.loads(result)
-            user_msgs = [m for m in data if m["message_type"] == "comment"]
-            assert len(user_msgs) >= 1
-            msg = user_msgs[0]
-            required = ["id", "actor_display_name", "message", "timestamp", "message_type", "is_replyable"]
-            for field in required:
-                assert field in msg, f"Missing field: {field}"
+            assert "specific test message" in result
+            assert "admin:" in result
         finally:
             await _delete_room(nc_mcp, str(room["token"]))
 
@@ -165,10 +174,32 @@ class TestGetMessages:
             await _send_msg(nc_mcp, str(room["token"]), "second")
             await _send_msg(nc_mcp, str(room["token"]), "third")
             result = await nc_mcp.call("get_messages", token=str(room["token"]))
-            data = json.loads(result)
-            user_msgs = [m for m in data if m["message_type"] == "comment"]
-            messages = [m["message"] for m in user_msgs]
-            assert messages == ["third", "second", "first"]
+            lines = _parse_compact_messages(result)
+            # Messages are newest first, so "third" should be before "first"
+            texts = [line.split(": ", 1)[1] for line in lines]
+            assert texts == ["third", "second", "first"]
+        finally:
+            await _delete_room(nc_mcp, str(room["token"]))
+
+    @pytest.mark.asyncio
+    async def test_system_messages_filtered_by_default(self, nc_mcp: McpTestHelper) -> None:
+        room = await _create_room(nc_mcp, "test-no-system")
+        try:
+            await _send_msg(nc_mcp, str(room["token"]), "user message")
+            result = await nc_mcp.call("get_messages", token=str(room["token"]))
+            # System messages like "You created the conversation" should NOT appear
+            assert "created the conversation" not in result
+            assert "user message" in result
+        finally:
+            await _delete_room(nc_mcp, str(room["token"]))
+
+    @pytest.mark.asyncio
+    async def test_system_messages_included_when_requested(self, nc_mcp: McpTestHelper) -> None:
+        room = await _create_room(nc_mcp, "test-with-system")
+        try:
+            result = await nc_mcp.call("get_messages", token=str(room["token"]), include_system=True)
+            # System message "You created the conversation" should appear
+            assert "created the conversation" in result
         finally:
             await _delete_room(nc_mcp, str(room["token"]))
 
@@ -179,19 +210,47 @@ class TestGetMessages:
             for i in range(5):
                 await _send_msg(nc_mcp, str(room["token"]), f"msg-{i}")
             result = await nc_mcp.call("get_messages", token=str(room["token"]), limit=2)
-            data = json.loads(result)
-            assert len(data) <= 2
+            lines = _parse_compact_messages(result)
+            assert len(lines) == 2
         finally:
             await _delete_room(nc_mcp, str(room["token"]))
 
     @pytest.mark.asyncio
-    async def test_system_messages_included(self, nc_mcp: McpTestHelper) -> None:
-        room = await _create_room(nc_mcp, "test-sys-msgs")
+    async def test_pagination_info_in_footer(self, nc_mcp: McpTestHelper) -> None:
+        room = await _create_room(nc_mcp, "test-pagination-info")
         try:
+            await _send_msg(nc_mcp, str(room["token"]), "test msg")
             result = await nc_mcp.call("get_messages", token=str(room["token"]))
-            data = json.loads(result)
-            system_msgs = [m for m in data if m["system_message"] != ""]
-            assert len(system_msgs) >= 1, "Should include 'conversation_created' system message"
+            assert "before_message_id=" in result
+            assert "messages" in result
+        finally:
+            await _delete_room(nc_mcp, str(room["token"]))
+
+    @pytest.mark.asyncio
+    async def test_pagination_with_before_message_id(self, nc_mcp: McpTestHelper) -> None:
+        room = await _create_room(nc_mcp, "test-paginate")
+        try:
+            # Send 6 messages
+            for i in range(6):
+                await _send_msg(nc_mcp, str(room["token"]), f"page-msg-{i}")
+
+            # Get first batch (3 newest)
+            result1 = await nc_mcp.call("get_messages", token=str(room["token"]), limit=3)
+            lines1 = _parse_compact_messages(result1)
+            assert len(lines1) == 3
+
+            # Get oldest ID from first batch for pagination
+            oldest_id = min(_extract_message_id(line) for line in lines1)
+
+            # Get next batch using before_message_id
+            result2 = await nc_mcp.call("get_messages", token=str(room["token"]), limit=3, before_message_id=oldest_id)
+            lines2 = _parse_compact_messages(result2)
+            assert len(lines2) >= 1
+
+            # Messages should not overlap
+            ids1 = {_extract_message_id(line) for line in lines1}
+            ids2 = {_extract_message_id(line) for line in lines2}
+            assert ids1.isdisjoint(ids2), "Paginated results should not overlap"
         finally:
             await _delete_room(nc_mcp, str(room["token"]))
 
@@ -201,13 +260,25 @@ class TestGetMessages:
             await nc_mcp.call("get_messages", token="nonexistent-xyz-12345")
 
     @pytest.mark.asyncio
-    async def test_empty_conversation_has_system_message(self, nc_mcp: McpTestHelper) -> None:
+    async def test_empty_conversation_no_chat_messages(self, nc_mcp: McpTestHelper) -> None:
         room = await _create_room(nc_mcp, "test-empty-chat")
         try:
+            # With system messages filtered, a new conversation has no messages
             result = await nc_mcp.call("get_messages", token=str(room["token"]))
-            data = json.loads(result)
-            # New conversation always has at least the "conversation_created" system message
-            assert len(data) >= 1
+            lines = _parse_compact_messages(result)
+            assert len(lines) == 0
+        finally:
+            await _delete_room(nc_mcp, str(room["token"]))
+
+    @pytest.mark.asyncio
+    async def test_compact_format_saves_space(self, nc_mcp: McpTestHelper) -> None:
+        room = await _create_room(nc_mcp, "test-compact-size")
+        try:
+            for i in range(10):
+                await _send_msg(nc_mcp, str(room["token"]), f"message number {i}")
+            result = await nc_mcp.call("get_messages", token=str(room["token"]))
+            # Compact format should be much smaller than JSON — well under 2KB for 10 msgs
+            assert len(result) < 2000
         finally:
             await _delete_room(nc_mcp, str(room["token"]))
 
@@ -335,11 +406,9 @@ class TestSendMessage:
     async def test_sent_message_appears_in_get_messages(self, nc_mcp: McpTestHelper) -> None:
         room = await _create_room(nc_mcp, "test-send-verify")
         try:
-            sent = await _send_msg(nc_mcp, str(room["token"]), "verify me")
+            await _send_msg(nc_mcp, str(room["token"]), "verify me")
             result = await nc_mcp.call("get_messages", token=str(room["token"]))
-            messages = json.loads(result)
-            msg_ids = [m["id"] for m in messages]
-            assert sent["id"] in msg_ids
+            assert "verify me" in result
         finally:
             await _delete_room(nc_mcp, str(room["token"]))
 
@@ -427,15 +496,14 @@ class TestDeleteMessage:
             await _delete_room(nc_mcp, str(room["token"]))
 
     @pytest.mark.asyncio
-    async def test_deleted_message_shows_system_message(self, nc_mcp: McpTestHelper) -> None:
-        room = await _create_room(nc_mcp, "test-del-system")
+    async def test_deleted_message_replaced_in_chat(self, nc_mcp: McpTestHelper) -> None:
+        room = await _create_room(nc_mcp, "test-del-replaced")
         try:
             sent = await _send_msg(nc_mcp, str(room["token"]), "delete me")
             await nc_mcp.call("delete_message", token=str(room["token"]), message_id=int(sent["id"]))
-            messages = json.loads(await nc_mcp.call("get_messages", token=str(room["token"])))
-            # After deletion, a system message "message_deleted" should appear
-            system_msgs = [m for m in messages if m["system_message"] == "message_deleted"]
-            assert len(system_msgs) >= 1
+            # With include_system, we should see "message_deleted" system message
+            result = await nc_mcp.call("get_messages", token=str(room["token"]), include_system=True)
+            assert "deleted" in result.lower()
         finally:
             await _delete_room(nc_mcp, str(room["token"]))
 
