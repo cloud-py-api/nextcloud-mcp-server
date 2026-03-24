@@ -14,6 +14,7 @@
 - [x] Notifications tools: list_notifications, dismiss_notification, dismiss_all_notifications (2026-03-21)
 - [x] Test suite overhaul: MCP tool-level integration tests (2026-03-21)
 - [x] Talk tools: list_conversations, get_conversation, get_messages, get_participants, send_message, create_conversation, delete_message, leave_conversation (2026-03-22)
+- [x] Talk polls: get_poll, create_poll, vote_poll, close_poll (2026-03-24)
 
 ### In Progress
 - [ ] Activity tools: get_activity
@@ -23,7 +24,6 @@
 (none)
 
 ### Next Up
-- Talk polls: get_poll, create_poll, vote_poll
 - Announcement Center
 - Files Sharing, Trashbin, Versions
 - Improve error handling and error messages
@@ -45,7 +45,8 @@
 | Users | 3 | 10 |
 | Notifications | 3 | 12 |
 | Talk | 8 | 44 |
+| Talk Polls | 4 | 31 |
 | Server | — | 5 |
 | Permissions | — | 16 |
 | Errors | — | 10 |
-| **Total** | **20** | **127** |
+| **Total** | **24** | **158** |

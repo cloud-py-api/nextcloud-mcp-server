@@ -1,4 +1,4 @@
-"""Nextcloud Talk tools — conversations, messages, and participants via OCS API."""
+"""Nextcloud Talk tools — conversations, messages, participants, and polls via OCS API."""
 
 import json
 from typing import Any
@@ -30,6 +30,42 @@ _PARTICIPANT_TYPES: dict[int, str] = {
     5: "user-following-public-link",
     6: "guest-moderator",
 }
+
+
+# Poll status codes
+_POLL_STATUS: dict[int, str] = {
+    0: "open",
+    1: "closed",
+    2: "draft",
+}
+
+_RESULT_MODES: dict[int, str] = {
+    0: "public",
+    1: "hidden",
+}
+
+
+def _format_poll(poll: dict[str, Any]) -> dict[str, Any]:
+    """Extract the most useful fields from a raw poll object."""
+    result: dict[str, Any] = {
+        "id": poll["id"],
+        "question": poll["question"],
+        "options": poll.get("options", []),
+        "status": _POLL_STATUS.get(poll.get("status", 0), f"unknown({poll.get('status')})"),
+        "result_mode": _RESULT_MODES.get(poll.get("resultMode", 0), f"unknown({poll.get('resultMode')})"),
+        "max_votes": poll.get("maxVotes", 0),
+        "actor_id": poll.get("actorId", ""),
+        "actor_display_name": poll.get("actorDisplayName", ""),
+        "num_voters": poll.get("numVoters", 0),
+        "voted_self": poll.get("votedSelf", []),
+    }
+    votes = poll.get("votes")
+    if votes:
+        result["votes"] = votes
+    details = poll.get("details")
+    if details:
+        result["details"] = details
+    return result
 
 
 def _format_conversation(room: dict[str, Any]) -> dict[str, Any]:
@@ -200,9 +236,127 @@ def _register_read_tools(mcp: FastMCP) -> None:
         participants = [_format_participant(p) for p in data]
         return json.dumps(participants, indent=2, default=str)
 
+    @mcp.tool()
+    @require_permission(PermissionLevel.READ)
+    async def get_poll(token: str, poll_id: int) -> str:
+        """Get a poll from a Talk conversation.
+
+        Returns poll details including question, options, current votes (if visible),
+        and which options the current user voted for.
+
+        Vote visibility depends on the poll's result_mode:
+        - "public": votes are visible after you vote.
+        - "hidden": votes are only visible after the poll is closed.
+
+        Args:
+            token: The conversation token. Use list_conversations to find tokens.
+            poll_id: The poll ID. Poll IDs appear in chat messages when a poll is created.
+
+        Returns:
+            JSON object with poll details: id, question, options, status,
+            result_mode, max_votes, votes, num_voters, voted_self.
+        """
+        client = get_client()
+        data = await client.ocs_get(f"apps/spreed/api/v1/poll/{token}/{poll_id}")
+        return json.dumps(_format_poll(data), indent=2, default=str)
+
+
+def _register_poll_tools(mcp: FastMCP) -> None:
+    """Register poll-related Talk tools (write + destructive)."""
+
+    @mcp.tool()
+    @require_permission(PermissionLevel.WRITE)
+    async def create_poll(
+        token: str,
+        question: str,
+        options: list[str],
+        result_mode: int = 0,
+        max_votes: int = 0,
+    ) -> str:
+        """Create a poll in a Talk conversation.
+
+        Polls can only be created in group or public conversations (not one-to-one).
+        A chat message is automatically posted announcing the poll.
+
+        Args:
+            token: The conversation token. Use list_conversations to find tokens.
+            question: The poll question (max 32,000 characters).
+            options: List of voting options (minimum 2 options required).
+                     Example: ["Yes", "No", "Maybe"]
+            result_mode: 0 for public results (voters see results immediately after voting),
+                         1 for hidden results (results shown only after poll is closed).
+                         Default: 0 (public).
+            max_votes: Maximum number of options a user can vote for.
+                       0 means unlimited (user can select all options). Default: 0.
+
+        Returns:
+            JSON object with poll details: id, question, options, status, result_mode, max_votes.
+        """
+        if len(options) < 2:
+            raise ValueError("A poll requires at least 2 options.")
+        client = get_client()
+        post_data: dict[str, Any] = {
+            "question": question,
+            "options[]": options,
+            "resultMode": result_mode,
+            "maxVotes": max_votes,
+        }
+        data = await client.ocs_post(f"apps/spreed/api/v1/poll/{token}", data=post_data)
+        return json.dumps(_format_poll(data), indent=2, default=str)
+
+    @mcp.tool()
+    @require_permission(PermissionLevel.WRITE)
+    async def vote_poll(token: str, poll_id: int, option_ids: list[int]) -> str:
+        """Vote on a poll in a Talk conversation.
+
+        Voting replaces any previous vote — calling this again with different
+        option_ids changes your vote. You cannot vote on closed polls.
+
+        Args:
+            token: The conversation token.
+            poll_id: The poll ID. Use get_poll to see available polls.
+            option_ids: List of option indices to vote for (0-based).
+                        For example, if options are ["Yes", "No", "Maybe"],
+                        use [0] to vote "Yes", or [0, 2] to vote "Yes" and "Maybe".
+                        The number of choices must not exceed the poll's max_votes
+                        (0 means unlimited).
+
+        Returns:
+            JSON object with updated poll details including your votes (voted_self)
+            and current vote counts (if visible).
+        """
+        if not option_ids:
+            raise ValueError("You must vote for at least one option.")
+        client = get_client()
+        post_data: dict[str, Any] = {"optionIds[]": option_ids}
+        data = await client.ocs_post(f"apps/spreed/api/v1/poll/{token}/{poll_id}", data=post_data)
+        return json.dumps(_format_poll(data), indent=2, default=str)
+
+    @mcp.tool()
+    @require_permission(PermissionLevel.DESTRUCTIVE)
+    async def close_poll(token: str, poll_id: int) -> str:
+        """Close a poll in a Talk conversation.
+
+        Once closed, no more votes can be cast and results become visible
+        to all participants (regardless of result_mode). Only the poll
+        creator or a conversation moderator can close a poll.
+
+        This action is irreversible — a closed poll cannot be reopened.
+
+        Args:
+            token: The conversation token.
+            poll_id: The poll ID to close.
+
+        Returns:
+            JSON object with the final poll results including all votes and details.
+        """
+        client = get_client()
+        data = await client.ocs_delete(f"apps/spreed/api/v1/poll/{token}/{poll_id}")
+        return json.dumps(_format_poll(data), indent=2, default=str)
+
 
 def _register_write_tools(mcp: FastMCP) -> None:
-    """Register write and destructive Talk tools."""
+    """Register write and destructive Talk tools for conversations and messages."""
 
     @mcp.tool()
     @require_permission(PermissionLevel.WRITE)
@@ -299,4 +453,5 @@ def _register_write_tools(mcp: FastMCP) -> None:
 def register(mcp: FastMCP) -> None:
     """Register Talk tools with the MCP server."""
     _register_read_tools(mcp)
+    _register_poll_tools(mcp)
     _register_write_tools(mcp)
