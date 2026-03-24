@@ -38,18 +38,14 @@ def _format_activity(a: dict[str, Any]) -> dict[str, Any]:
         "user": a.get("user", ""),
         "subject": a.get("subject", ""),
         "datetime": a.get("datetime", ""),
+        "link": a.get("link", ""),
+        "object_type": a.get("object_type", ""),
+        "object_id": a.get("object_id", 0),
+        "object_name": a.get("object_name", ""),
     }
     message = a.get("message", "")
     if message:
         result["message"] = message
-    link = a.get("link", "")
-    if link:
-        result["link"] = link
-    object_type = a.get("object_type", "")
-    if object_type:
-        result["object_type"] = object_type
-        result["object_id"] = a.get("object_id", 0)
-        result["object_name"] = a.get("object_name", "")
     return result
 
 

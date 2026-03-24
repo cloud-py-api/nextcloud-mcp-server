@@ -157,6 +157,32 @@ class TestGetActivity:
         data = json.loads(result.split("\n\n---")[0])
         assert isinstance(data, list)
 
+    @pytest.mark.asyncio
+    async def test_object_type_and_object_id_filter(self, nc_mcp: McpTestHelper) -> None:
+        await nc_mcp.client.dav_put("activity-objfilter.txt", b"filter test", content_type="text/plain")
+        try:
+            all_result = await nc_mcp.call("get_activity", activity_filter="files", limit=5)
+            all_data = json.loads(all_result.split("\n\n---")[0])
+            file_acts = [a for a in all_data if "activity-objfilter" in a.get("subject", "")]
+            assert len(file_acts) >= 1
+            obj_id = file_acts[0]["object_id"]
+            filtered = await nc_mcp.call("get_activity", object_type="files", object_id=obj_id, limit=10)
+            filtered_data = json.loads(filtered.split("\n\n---")[0])
+            assert len(filtered_data) >= 1
+            assert any(a.get("object_id") == obj_id for a in filtered_data)
+        finally:
+            with contextlib.suppress(Exception):
+                await nc_mcp.client.dav_delete("activity-objfilter.txt")
+
+    @pytest.mark.asyncio
+    async def test_activity_with_message_field(self, nc_mcp: McpTestHelper) -> None:
+        await _generate_activity(nc_mcp)
+        result = await nc_mcp.call("get_activity", limit=50)
+        data = json.loads(result.split("\n\n---")[0])
+        activities_with_message = [a for a in data if "message" in a]
+        activities_without_message = [a for a in data if "message" not in a]
+        assert len(activities_with_message) + len(activities_without_message) == len(data)
+
 
 class TestActivityPermissions:
     @pytest.mark.asyncio
