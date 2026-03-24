@@ -17,11 +17,6 @@ from .conftest import McpTestHelper
 pytestmark = pytest.mark.integration
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
 async def _create_room(nc_mcp: McpTestHelper, name: str, room_type: int = 2) -> dict[str, Any]:
     """Create a conversation and return the parsed result."""
     result = await nc_mcp.call("create_conversation", room_type=room_type, name=name)
@@ -49,11 +44,6 @@ def _extract_message_id(line: str) -> int:
     match = re.match(r"\[(\d+)\]", line)
     assert match, f"Cannot extract message ID from: {line}"
     return int(match.group(1))
-
-
-# ---------------------------------------------------------------------------
-# list_conversations
-# ---------------------------------------------------------------------------
 
 
 class TestListConversations:
@@ -103,11 +93,6 @@ class TestListConversations:
             await _delete_room(nc_mcp, str(public_room["token"]))
 
 
-# ---------------------------------------------------------------------------
-# get_conversation
-# ---------------------------------------------------------------------------
-
-
 class TestGetConversation:
     @pytest.mark.asyncio
     async def test_returns_conversation_details(self, nc_mcp: McpTestHelper) -> None:
@@ -134,11 +119,6 @@ class TestGetConversation:
             assert data["read_only"] is False
         finally:
             await _delete_room(nc_mcp, str(room["token"]))
-
-
-# ---------------------------------------------------------------------------
-# get_messages (compact format)
-# ---------------------------------------------------------------------------
 
 
 class TestGetMessages:
@@ -283,11 +263,6 @@ class TestGetMessages:
             await _delete_room(nc_mcp, str(room["token"]))
 
 
-# ---------------------------------------------------------------------------
-# get_participants
-# ---------------------------------------------------------------------------
-
-
 class TestGetParticipants:
     @pytest.mark.asyncio
     async def test_returns_participants_list(self, nc_mcp: McpTestHelper) -> None:
@@ -328,11 +303,6 @@ class TestGetParticipants:
     async def test_nonexistent_conversation_raises(self, nc_mcp: McpTestHelper) -> None:
         with pytest.raises(ToolError):
             await nc_mcp.call("get_participants", token="nonexistent-xyz-12345")
-
-
-# ---------------------------------------------------------------------------
-# send_message
-# ---------------------------------------------------------------------------
 
 
 class TestSendMessage:
@@ -413,11 +383,6 @@ class TestSendMessage:
             await _delete_room(nc_mcp, str(room["token"]))
 
 
-# ---------------------------------------------------------------------------
-# create_conversation
-# ---------------------------------------------------------------------------
-
-
 class TestCreateConversation:
     @pytest.mark.asyncio
     async def test_create_group_conversation(self, nc_mcp: McpTestHelper) -> None:
@@ -479,11 +444,6 @@ class TestCreateConversation:
             await _delete_room(nc_mcp, str(data["token"]))
 
 
-# ---------------------------------------------------------------------------
-# delete_message
-# ---------------------------------------------------------------------------
-
-
 class TestDeleteMessage:
     @pytest.mark.asyncio
     async def test_delete_own_message(self, nc_mcp: McpTestHelper) -> None:
@@ -522,11 +482,6 @@ class TestDeleteMessage:
             await nc_mcp.call("delete_message", token="nonexistent-xyz-12345", message_id=1)
 
 
-# ---------------------------------------------------------------------------
-# leave_conversation
-# ---------------------------------------------------------------------------
-
-
 class TestLeaveConversation:
     @pytest.mark.asyncio
     async def test_leave_group_conversation(self, nc_mcp: McpTestHelper) -> None:
@@ -555,11 +510,6 @@ class TestLeaveConversation:
     async def test_leave_nonexistent_conversation_raises(self, nc_mcp: McpTestHelper) -> None:
         with pytest.raises(ToolError):
             await nc_mcp.call("leave_conversation", token="nonexistent-xyz-12345")
-
-
-# ---------------------------------------------------------------------------
-# Permission enforcement
-# ---------------------------------------------------------------------------
 
 
 class TestTalkPermissions:

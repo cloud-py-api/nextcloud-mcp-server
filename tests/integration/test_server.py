@@ -9,8 +9,10 @@ from nextcloud_mcp.server import create_server
 pytestmark = pytest.mark.integration
 
 EXPECTED_TOOLS = [
+    "close_poll",
     "create_conversation",
     "create_directory",
+    "create_poll",
     "delete_file",
     "delete_message",
     "dismiss_all_notifications",
@@ -20,6 +22,7 @@ EXPECTED_TOOLS = [
     "get_file",
     "get_messages",
     "get_participants",
+    "get_poll",
     "get_user",
     "leave_conversation",
     "list_conversations",
@@ -29,6 +32,7 @@ EXPECTED_TOOLS = [
     "move_file",
     "send_message",
     "upload_file",
+    "vote_poll",
 ]
 
 

@@ -106,12 +106,14 @@ class NextcloudClient:
         result: dict[str, Any] = response.json()  # type: ignore[assignment]
         return result["ocs"]["data"]
 
-    async def ocs_delete(self, path: str) -> None:
-        """Make an OCS DELETE request."""
+    async def ocs_delete(self, path: str) -> Any:
+        """Make an OCS DELETE request and return the data portion (if any)."""
         session = await self._get_session()
         url = f"{self._base_url}/ocs/v2.php/{path}"
         response = await session.delete(url)
         _raise_for_status(response, f"OCS DELETE {path}")
+        result: dict[str, Any] = response.json()  # type: ignore[assignment]
+        return result["ocs"]["data"]
 
     # --- WebDAV ---
 
