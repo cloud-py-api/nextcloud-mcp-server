@@ -1,6 +1,8 @@
 # Nextcloud MCP Server
 
-[![CI](https://github.com/cloud-py-api/nextcloud-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/cloud-py-api/nextcloud-mcp-server/actions/workflows/ci.yml)
+[![Lint](https://github.com/cloud-py-api/nextcloud-mcp-server/actions/workflows/lint.yml/badge.svg)](https://github.com/cloud-py-api/nextcloud-mcp-server/actions/workflows/lint.yml)
+[![Unit Tests](https://github.com/cloud-py-api/nextcloud-mcp-server/actions/workflows/tests-unit.yml/badge.svg)](https://github.com/cloud-py-api/nextcloud-mcp-server/actions/workflows/tests-unit.yml)
+[![Integration Tests](https://github.com/cloud-py-api/nextcloud-mcp-server/actions/workflows/tests-integration.yml/badge.svg)](https://github.com/cloud-py-api/nextcloud-mcp-server/actions/workflows/tests-integration.yml)
 [![codecov](https://codecov.io/gh/cloud-py-api/nextcloud-mcp-server/graph/badge.svg)](https://codecov.io/gh/cloud-py-api/nextcloud-mcp-server)
 
 > **Experimental** — This repository is fully maintained by AI (Claude). It serves as an experiment in autonomous AI-driven open-source development.

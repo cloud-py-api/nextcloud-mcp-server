@@ -1,4 +1,4 @@
-name: CI
+name: Integration Tests
 
 on:
   push:
@@ -7,63 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  lint:
-    name: Lint & Type Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-
-      - name: Ruff check
-        run: ruff check .
-
-      - name: Ruff format check
-        run: ruff format --check .
-
-      - name: isort check
-        run: isort --check .
-
-      - name: Pyright
-        run: pyright
-
-  test-unit:
-    name: Unit Tests (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.12", "3.13"]
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-
-      - name: Run unit tests
-        run: pytest tests/ -v --ignore=tests/integration/ --cov=nextcloud_mcp --cov-report=xml:coverage-unit.xml
-
-      - name: Upload unit test coverage
-        uses: codecov/codecov-action@v5
-        with:
-          files: coverage-unit.xml
-          flags: unit,py${{ matrix.python-version }}
-          fail_ci_if_error: false
-
   test-integration:
-    name: Integration Tests (NC ${{ matrix.nextcloud-version }})
+    name: NC ${{ matrix.nextcloud-version }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -124,7 +69,7 @@ jobs:
           NEXTCLOUD_PASSWORD: admin
         run: pytest tests/integration/ -v -m integration --cov=nextcloud_mcp --cov-report=xml:coverage-integration.xml
 
-      - name: Upload integration test coverage
+      - name: Upload coverage
         uses: codecov/codecov-action@v5
         with:
           files: coverage-integration.xml
