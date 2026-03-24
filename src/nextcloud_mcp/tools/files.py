@@ -1,6 +1,7 @@
 """File management tools — list, read, upload, delete, move, search files via WebDAV."""
 
 import json
+from xml.sax.saxutils import escape as xml_escape
 
 from mcp.server.fastmcp import FastMCP
 
@@ -13,19 +14,19 @@ def _build_search_xml(user: str, query: str, path: str, limit: int, offset: int,
     """Build a WebDAV SEARCH request body."""
     where_parts: list[str] = []
     if query:
-        where_parts.append(f"<d:like><d:prop><d:displayname/></d:prop><d:literal>%{query}%</d:literal></d:like>")
+        q = xml_escape(query)
+        where_parts.append(f"<d:like><d:prop><d:displayname/></d:prop><d:literal>%{q}%</d:literal></d:like>")
     if mimetype:
-        mime_pattern = mimetype if "%" in mimetype or "/" in mimetype else f"{mimetype}/%"
-        where_parts.append(
-            f"<d:like><d:prop><d:getcontenttype/></d:prop><d:literal>{mime_pattern}</d:literal></d:like>"
-        )
+        m = xml_escape(mimetype if "%" in mimetype or "/" in mimetype else f"{mimetype}/%")
+        where_parts.append(f"<d:like><d:prop><d:getcontenttype/></d:prop><d:literal>{m}</d:literal></d:like>")
     if not where_parts:
         where_clause = "<d:gt><d:prop><oc:fileid/></d:prop><d:literal>0</d:literal></d:gt>"
     elif len(where_parts) == 1:
         where_clause = where_parts[0]
     else:
         where_clause = "<d:and>" + "".join(where_parts) + "</d:and>"
-    scope = f"/files/{user}/{path.strip('/')}" if path.strip("/") else f"/files/{user}"
+    safe_path = xml_escape(path.strip("/"))
+    scope = f"/files/{user}/{safe_path}" if safe_path else f"/files/{user}"
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
         '<d:searchrequest xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">'
@@ -119,6 +120,7 @@ def _register_read_tools(mcp: FastMCP) -> None:
         if not query and not mimetype:
             raise ValueError("At least one of 'query' or 'mimetype' must be provided.")
         limit = max(1, min(100, limit))
+        offset = max(0, offset)
         config = get_config()
         client = get_client()
         body = _build_search_xml(config.user, query, path, limit, offset, mimetype)
