@@ -252,7 +252,7 @@ class TestSearchFiles:
         await nc_mcp.create_test_dir()
         await nc_mcp.upload_test_file(f"{TEST_BASE_DIR}/searchable-doc.txt", "content")
         result = await nc_mcp.call("search_files", query="searchable-doc")
-        data = json.loads(result.split("\n\n---")[0])
+        data = json.loads(result)["data"]
         assert len(data) >= 1
         assert any("searchable-doc" in e["path"] for e in data)
 
@@ -261,7 +261,7 @@ class TestSearchFiles:
         await nc_mcp.create_test_dir()
         await nc_mcp.upload_test_file(f"{TEST_BASE_DIR}/search-props.txt", "hello")
         result = await nc_mcp.call("search_files", query="search-props")
-        data = json.loads(result.split("\n\n---")[0])
+        data = json.loads(result)["data"]
         assert len(data) >= 1
         entry = next(e for e in data if "search-props" in e["path"])
         for field in ["path", "is_directory", "file_id"]:
@@ -273,7 +273,7 @@ class TestSearchFiles:
         await nc_mcp.create_test_dir()
         await nc_mcp.upload_test_file(f"{TEST_BASE_DIR}/search-mime.txt", "text file")
         result = await nc_mcp.call("search_files", mimetype="text", path=TEST_BASE_DIR)
-        data = json.loads(result.split("\n\n---")[0])
+        data = json.loads(result)["data"]
         assert len(data) >= 1
         assert any("search-mime" in e["path"] for e in data)
 
@@ -282,14 +282,14 @@ class TestSearchFiles:
         await nc_mcp.create_test_dir()
         await nc_mcp.upload_test_file(f"{TEST_BASE_DIR}/combined-search.txt", "combined")
         result = await nc_mcp.call("search_files", query="combined-search", mimetype="text")
-        data = json.loads(result.split("\n\n---")[0])
+        data = json.loads(result)["data"]
         assert len(data) >= 1
         assert any("combined-search" in e["path"] for e in data)
 
     @pytest.mark.asyncio
     async def test_search_no_results(self, nc_mcp: McpTestHelper) -> None:
         result = await nc_mcp.call("search_files", query="nonexistent-file-xyz-999")
-        data: list[Any] = json.loads(result.split("\n\n---")[0]) if "---" in result else json.loads(result)
+        data: list[Any] = json.loads(result)["data"]
         assert isinstance(data, list)
         assert len(data) == 0
 
@@ -299,7 +299,7 @@ class TestSearchFiles:
         for i in range(5):
             await nc_mcp.upload_test_file(f"{TEST_BASE_DIR}/limit-file-{i}.txt", f"content {i}")
         result = await nc_mcp.call("search_files", query="limit-file", limit=2)
-        data = json.loads(result.split("\n\n---")[0])
+        data = json.loads(result)["data"]
         assert len(data) == 2
 
     @pytest.mark.asyncio
@@ -308,25 +308,28 @@ class TestSearchFiles:
         for i in range(4):
             await nc_mcp.upload_test_file(f"{TEST_BASE_DIR}/page-file-{i}.txt", f"content {i}")
         page1 = await nc_mcp.call("search_files", query="page-file", limit=2, offset=0)
-        data1 = json.loads(page1.split("\n\n---")[0])
+        data1 = json.loads(page1)["data"]
         assert len(data1) == 2
         page2 = await nc_mcp.call("search_files", query="page-file", limit=2, offset=2)
-        data2 = json.loads(page2.split("\n\n---")[0])
+        data2 = json.loads(page2)["data"]
         assert len(data2) >= 1
 
     @pytest.mark.asyncio
-    async def test_search_pagination_footer(self, nc_mcp: McpTestHelper) -> None:
+    async def test_search_pagination_info(self, nc_mcp: McpTestHelper) -> None:
         await nc_mcp.create_test_dir()
         await nc_mcp.upload_test_file(f"{TEST_BASE_DIR}/footer-file.txt", "test")
         result = await nc_mcp.call("search_files", query="footer-file")
-        assert "offset=" in result
+        parsed = json.loads(result)
+        assert "pagination" in parsed
+        assert "has_more" in parsed["pagination"]
+        assert "offset" in parsed["pagination"]
 
     @pytest.mark.asyncio
     async def test_search_scoped_to_path(self, nc_mcp: McpTestHelper) -> None:
         await nc_mcp.create_test_dir()
         await nc_mcp.upload_test_file(f"{TEST_BASE_DIR}/scoped.txt", "inside")
         result = await nc_mcp.call("search_files", query="scoped", path=TEST_BASE_DIR)
-        data = json.loads(result.split("\n\n---")[0])
+        data = json.loads(result)["data"]
         assert len(data) >= 1
         assert all(TEST_BASE_DIR in e["path"] for e in data)
 
@@ -338,5 +341,5 @@ class TestSearchFiles:
     @pytest.mark.asyncio
     async def test_search_read_only_allowed(self, nc_mcp_read_only: McpTestHelper) -> None:
         result = await nc_mcp_read_only.call("search_files", query="anything")
-        data = json.loads(result.split("\n\n---")[0]) if "---" in result else json.loads(result)
+        data = json.loads(result)["data"]
         assert isinstance(data, list)

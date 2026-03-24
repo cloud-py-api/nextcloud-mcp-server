@@ -33,7 +33,7 @@ class TestListComments:
         file_id = await _get_file_id(nc_mcp, "comment-empty.txt")
         try:
             result = await nc_mcp.call("list_comments", file_id=file_id)
-            data: list[Any] = json.loads(result.split("\n\n---")[0]) if "---" in result else json.loads(result)
+            data: list[Any] = json.loads(result)["data"]
             assert isinstance(data, list)
             assert len(data) == 0
         finally:
@@ -45,7 +45,7 @@ class TestListComments:
         try:
             await _add_comment(nc_mcp, file_id, "Test comment")
             result = await nc_mcp.call("list_comments", file_id=file_id)
-            data = json.loads(result.split("\n\n---")[0])
+            data = json.loads(result)["data"]
             assert len(data) >= 1
             assert data[0]["message"] == "Test comment"
         finally:
@@ -57,7 +57,7 @@ class TestListComments:
         try:
             await _add_comment(nc_mcp, file_id, "Fields check")
             result = await nc_mcp.call("list_comments", file_id=file_id)
-            data = json.loads(result.split("\n\n---")[0])
+            data = json.loads(result)["data"]
             comment = data[0]
             for field in ["id", "actor_id", "message", "created"]:
                 assert field in comment, f"Missing field: {field}"
@@ -72,7 +72,7 @@ class TestListComments:
             await _add_comment(nc_mcp, file_id, "Second")
             await _add_comment(nc_mcp, file_id, "Third")
             result = await nc_mcp.call("list_comments", file_id=file_id)
-            data = json.loads(result.split("\n\n---")[0])
+            data = json.loads(result)["data"]
             messages = sorted(c["message"] for c in data)
             assert messages == ["First", "Second", "Third"]
         finally:
@@ -85,7 +85,7 @@ class TestListComments:
             for i in range(5):
                 await _add_comment(nc_mcp, file_id, f"Comment {i}")
             result = await nc_mcp.call("list_comments", file_id=file_id, limit=2)
-            data = json.loads(result.split("\n\n---")[0])
+            data = json.loads(result)["data"]
             assert len(data) == 2
         finally:
             await nc_mcp.client.dav_delete("comment-limit.txt")
@@ -97,9 +97,9 @@ class TestListComments:
             for i in range(4):
                 await _add_comment(nc_mcp, file_id, f"Page comment {i}")
             page1 = await nc_mcp.call("list_comments", file_id=file_id, limit=2, offset=0)
-            data1 = json.loads(page1.split("\n\n---")[0])
+            data1 = json.loads(page1)["data"]
             page2 = await nc_mcp.call("list_comments", file_id=file_id, limit=2, offset=2)
-            data2 = json.loads(page2.split("\n\n---")[0])
+            data2 = json.loads(page2)["data"]
             ids1 = {c["id"] for c in data1}
             ids2 = {c["id"] for c in data2}
             assert ids1.isdisjoint(ids2)
@@ -107,12 +107,15 @@ class TestListComments:
             await nc_mcp.client.dav_delete("comment-page.txt")
 
     @pytest.mark.asyncio
-    async def test_pagination_footer_present(self, nc_mcp: McpTestHelper) -> None:
+    async def test_pagination_info_present(self, nc_mcp: McpTestHelper) -> None:
         file_id = await _get_file_id(nc_mcp, "comment-footer.txt")
         try:
             await _add_comment(nc_mcp, file_id, "Footer test")
             result = await nc_mcp.call("list_comments", file_id=file_id)
-            assert "offset=" in result
+            parsed = json.loads(result)
+            assert "pagination" in parsed
+            assert "has_more" in parsed["pagination"]
+            assert "offset" in parsed["pagination"]
         finally:
             await nc_mcp.client.dav_delete("comment-footer.txt")
 
@@ -181,7 +184,7 @@ class TestAddComment:
         try:
             await _add_comment(nc_mcp, file_id, "Author test")
             result = await nc_mcp.call("list_comments", file_id=file_id)
-            data = json.loads(result.split("\n\n---")[0])
+            data = json.loads(result)["data"]
             assert data[0]["actor_id"] == "admin"
         finally:
             await nc_mcp.client.dav_delete("comment-author.txt")
@@ -192,7 +195,7 @@ class TestAddComment:
         try:
             await _add_comment(nc_mcp, file_id, "Hey @admin check this")
             result = await nc_mcp.call("list_comments", file_id=file_id)
-            data = json.loads(result.split("\n\n---")[0])
+            data = json.loads(result)["data"]
             comment = data[0] if data[0]["message"] == "Hey @admin check this" else data[-1]
             assert "mentions" in comment
             assert any(m.get("mentionId") == "admin" for m in comment["mentions"])
@@ -221,7 +224,7 @@ class TestEditComment:
             data = json.loads(result)
             assert data["message"] == "Edited"
             listed = await nc_mcp.call("list_comments", file_id=file_id)
-            list_data = json.loads(listed.split("\n\n---")[0])
+            list_data = json.loads(listed)["data"]
             assert list_data[0]["message"] == "Edited"
         finally:
             await nc_mcp.client.dav_delete("comment-edit.txt")
@@ -277,7 +280,7 @@ class TestDeleteComment:
             result = await nc_mcp.call("delete_comment", file_id=file_id, comment_id=int(added["id"]))
             assert "deleted" in result.lower()
             listed = await nc_mcp.call("list_comments", file_id=file_id)
-            data = json.loads(listed.split("\n\n---")[0]) if "---" in listed else json.loads(listed)
+            data = json.loads(listed)["data"]
             assert all(c["id"] != int(added["id"]) for c in data)
         finally:
             await nc_mcp.client.dav_delete("comment-del.txt")
@@ -298,7 +301,7 @@ class TestCommentPermissions:
         file_id = await _get_file_id(nc_mcp, "comment-perm-read.txt")
         try:
             result = await nc_mcp_read_only.call("list_comments", file_id=file_id)
-            data = json.loads(result.split("\n\n---")[0]) if "---" in result else json.loads(result)
+            data = json.loads(result)["data"]
             assert isinstance(data, list)
         finally:
             await nc_mcp.client.dav_delete("comment-perm-read.txt")

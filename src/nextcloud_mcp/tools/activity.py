@@ -87,9 +87,8 @@ def register(mcp: FastMCP) -> None:
             sort: Sort order: "desc" (newest first, default) or "asc" (oldest first).
 
         Returns:
-            JSON list of activity objects, each with: activity_id, app, type,
-            user, subject, datetime. The last line shows pagination info if more
-            activities may exist.
+            JSON object with "data" (list of activities) and "pagination"
+            (count, has_more, since). Use since value for the next page.
         """
         if activity_filter not in _VALID_FILTERS:
             valid = ", ".join(sorted(_VALID_FILTERS))
@@ -111,8 +110,13 @@ def register(mcp: FastMCP) -> None:
         )
         data = await client.ocs_get(path, params=params)
         activities = [_format_activity(a) for a in data]
-        result = json.dumps(activities, indent=2, default=str)
-        if activities:
-            oldest_id = min(a["activity_id"] for a in activities)
-            result += f"\n\n--- {len(activities)} activities. For older results, call with since={oldest_id} ---"
-        return result
+        oldest_id = min(a["activity_id"] for a in activities) if activities else None
+        response: dict[str, Any] = {
+            "data": activities,
+            "pagination": {
+                "count": len(activities),
+                "has_more": len(activities) == limit,
+                "since": oldest_id,
+            },
+        }
+        return json.dumps(response, indent=2, default=str)

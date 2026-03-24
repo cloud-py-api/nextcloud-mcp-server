@@ -114,8 +114,8 @@ def _register_read_tools(mcp: FastMCP) -> None:
             offset: Number of results to skip for pagination (default: 0).
 
         Returns:
-            JSON list of matching files with: path, is_directory, file_id, size,
-            last_modified, content_type. Includes pagination info.
+            JSON object with "data" (list of matching files) and "pagination"
+            (count, offset, has_more).
         """
         if not query and not mimetype:
             raise ValueError("At least one of 'query' or 'mimetype' must be provided.")
@@ -132,11 +132,15 @@ def _register_read_tools(mcp: FastMCP) -> None:
             context=f"Search files: query={query!r} mimetype={mimetype!r}",
         )
         results = NextcloudClient._parse_propfind(response.text or "", config.user)
-        result = json.dumps(results, indent=2, default=str)
-        if results:
-            next_offset = offset + len(results)
-            result += f"\n\n--- {len(results)} results (offset={offset}). Next page: offset={next_offset} ---"
-        return result
+        response_data = {
+            "data": results,
+            "pagination": {
+                "count": len(results),
+                "offset": offset,
+                "has_more": len(results) == limit,
+            },
+        }
+        return json.dumps(response_data, indent=2, default=str)
 
 
 def _register_write_tools(mcp: FastMCP) -> None:
