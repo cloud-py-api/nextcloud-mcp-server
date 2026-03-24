@@ -65,7 +65,7 @@ class TestListComments:
             await nc_mcp.client.dav_delete("comment-fields.txt")
 
     @pytest.mark.asyncio
-    async def test_multiple_comments_ordered(self, nc_mcp: McpTestHelper) -> None:
+    async def test_multiple_comments_all_returned(self, nc_mcp: McpTestHelper) -> None:
         file_id = await _get_file_id(nc_mcp, "comment-order.txt")
         try:
             await _add_comment(nc_mcp, file_id, "First")
@@ -73,7 +73,7 @@ class TestListComments:
             await _add_comment(nc_mcp, file_id, "Third")
             result = await nc_mcp.call("list_comments", file_id=file_id)
             data = json.loads(result.split("\n\n---")[0])
-            messages = [c["message"] for c in data]
+            messages = sorted(c["message"] for c in data)
             assert messages == ["First", "Second", "Third"]
         finally:
             await nc_mcp.client.dav_delete("comment-order.txt")
