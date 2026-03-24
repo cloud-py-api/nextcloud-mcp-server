@@ -11,11 +11,6 @@ from .conftest import McpTestHelper
 pytestmark = pytest.mark.integration
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
 async def _create_room(nc_mcp: McpTestHelper, name: str, room_type: int = 2) -> dict[str, Any]:
     """Create a conversation and return the parsed result."""
     result = await nc_mcp.call("create_conversation", room_type=room_type, name=name)
@@ -47,11 +42,6 @@ async def _create_test_poll(
         max_votes=max_votes,
     )
     return json.loads(result)
-
-
-# ---------------------------------------------------------------------------
-# create_poll
-# ---------------------------------------------------------------------------
 
 
 class TestCreatePoll:
@@ -149,11 +139,6 @@ class TestCreatePoll:
             await _delete_room(nc_mcp, str(room["token"]))
 
 
-# ---------------------------------------------------------------------------
-# get_poll
-# ---------------------------------------------------------------------------
-
-
 class TestGetPoll:
     @pytest.mark.asyncio
     async def test_get_poll_returns_details(self, nc_mcp: McpTestHelper) -> None:
@@ -218,11 +203,6 @@ class TestGetPoll:
             assert poll["num_voters"] == 1
         finally:
             await _delete_room(nc_mcp, str(room["token"]))
-
-
-# ---------------------------------------------------------------------------
-# vote_poll
-# ---------------------------------------------------------------------------
 
 
 class TestVotePoll:
@@ -317,11 +297,6 @@ class TestVotePoll:
             await _delete_room(nc_mcp, str(room["token"]))
 
 
-# ---------------------------------------------------------------------------
-# close_poll
-# ---------------------------------------------------------------------------
-
-
 class TestClosePoll:
     @pytest.mark.asyncio
     async def test_close_poll(self, nc_mcp: McpTestHelper) -> None:
@@ -386,11 +361,6 @@ class TestClosePoll:
             assert poll["options"] == ["A", "B", "C"]
         finally:
             await _delete_room(nc_mcp, str(room["token"]))
-
-
-# ---------------------------------------------------------------------------
-# Permission enforcement
-# ---------------------------------------------------------------------------
 
 
 class TestPollPermissions:

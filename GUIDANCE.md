@@ -8,6 +8,7 @@ Rules and corrections for writing code in this project.
 - Never import inside functions. All imports must be at the top of the file.
 - Never use `# noqa: F401` — if something is imported, it must be used.
 - Maximum line length is 120 characters.
+- No decorative/separator comments (e.g. `# -----------` section banners). Code structure should be self-evident. Only add comments that explain *why*, never *what*.
 
 ## Tooling
 
