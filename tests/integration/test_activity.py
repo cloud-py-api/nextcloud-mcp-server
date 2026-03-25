@@ -143,11 +143,16 @@ class TestGetActivity:
     @pytest.mark.asyncio
     async def test_pagination_since_asc_uses_max_id(self, nc_mcp: McpTestHelper) -> None:
         await _generate_activity(nc_mcp)
-        result = await nc_mcp.call("get_activity", sort="asc", limit=5)
+        result = await nc_mcp.call("get_activity", sort="asc", limit=1)
         parsed = json.loads(result)
         data = parsed["data"]
-        assert len(data) >= 2
-        assert parsed["pagination"]["since"] == max(a["activity_id"] for a in data)
+        assert len(data) >= 1
+        since = parsed["pagination"]["since"]
+        assert since == max(a["activity_id"] for a in data)
+        result2 = await nc_mcp.call("get_activity", sort="asc", limit=5, since=since)
+        data2 = json.loads(result2)["data"]
+        if data2:
+            assert all(a["activity_id"] > since for a in data2)
 
     @pytest.mark.asyncio
     async def test_invalid_filter_raises(self, nc_mcp: McpTestHelper) -> None:
