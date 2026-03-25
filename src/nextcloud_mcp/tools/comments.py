@@ -110,10 +110,11 @@ def _register_read_tools(mcp: FastMCP) -> None:
             offset: Number of comments to skip for pagination (default: 0).
 
         Returns:
-            JSON list of comment objects with: id, actor_display_name, message,
-            created, parent_id, is_unread. Includes pagination info.
+            JSON object with "data" (list of comments) and "pagination"
+            (count, offset, has_more).
         """
         limit = max(1, min(100, limit))
+        offset = max(0, offset)
         client = get_client()
         body = FILTER_COMMENTS_BODY.format(limit=limit, offset=offset)
         response = await client.dav_request(
@@ -124,11 +125,15 @@ def _register_read_tools(mcp: FastMCP) -> None:
             context=f"List comments on file {file_id}",
         )
         comments = _parse_comments_xml(response.text or "")
-        result = json.dumps(comments, indent=2, default=str)
-        if comments:
-            next_offset = offset + len(comments)
-            result += f"\n\n--- {len(comments)} comments (offset={offset}). Next page: offset={next_offset} ---"
-        return result
+        response_data: dict[str, Any] = {
+            "data": comments,
+            "pagination": {
+                "count": len(comments),
+                "offset": offset,
+                "has_more": len(comments) == limit,
+            },
+        }
+        return json.dumps(response_data, indent=2, default=str)
 
 
 def _register_write_tools(mcp: FastMCP) -> None:
