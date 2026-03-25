@@ -22,7 +22,7 @@
 - [x] User Status tools: get_user_status, set_user_status, clear_user_status (2026-03-25)
 - [x] Users tools: create_user, delete_user (2026-03-25)
 - [x] copy_file tool via WebDAV COPY (2026-03-25)
-- [x] get_file returns MCP ImageContent for images (PNG, JPEG, GIF, WebP) (2026-03-25)
+- [x] get_file returns MCP ImageContent for images (PNG, JPEG, GIF, WebP, BMP, SVG) (2026-03-25)
 
 ### In Progress
 

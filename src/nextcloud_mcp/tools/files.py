@@ -94,14 +94,15 @@ def _register_read_tools(mcp: FastMCP) -> None:
         """
         client = get_client()
         content, content_type = await client.dav_get(path)
-        if content_type in _IMAGE_MIME_TYPES and len(content) <= _MAX_IMAGE_SIZE:
+        ct = content_type.lower()
+        if ct in _IMAGE_MIME_TYPES and len(content) <= _MAX_IMAGE_SIZE:
             data = base64.b64encode(content).decode("ascii")
-            return [ImageContent(type="image", data=data, mimeType=content_type)]
+            return [ImageContent(type="image", data=data, mimeType=ct)]
         try:
             return [TextContent(type="text", text=content.decode("utf-8"))]
         except UnicodeDecodeError:
             size_kb = len(content) / 1024
-            msg = f"[Binary file: {size_kb:.1f} KB, type: {content_type}. Cannot display binary content.]"
+            msg = f"[Binary file: {size_kb:.1f} KB, type: {ct}. Cannot display binary content.]"
             return [TextContent(type="text", text=msg)]
 
     @mcp.tool(annotations=READONLY)
