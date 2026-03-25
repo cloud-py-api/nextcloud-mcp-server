@@ -29,6 +29,9 @@ class McpTestHelper:
     async def call(self, tool_name: str, **kwargs: object) -> str:
         """Call an MCP tool by name and return its string result."""
         result = await self.mcp._tool_manager.call_tool(tool_name, dict(kwargs))
+        if isinstance(result, list):
+            texts: list[str] = [str(item.text) for item in result if hasattr(item, "text")]  # type: ignore[union-attr]
+            return texts[0] if len(texts) == 1 else "\n".join(texts)
         return str(result)
 
     def tool_names(self) -> list[str]:
