@@ -113,7 +113,7 @@ class TestCreateShare:
     @pytest.mark.asyncio
     async def test_create_link_with_password(self, nc_mcp: McpTestHelper) -> None:
         await _setup_share_file(nc_mcp)
-        result = await nc_mcp.call("create_share", path=f"/{SHARE_FILE}", share_type=3, password="secret123")
+        result = await nc_mcp.call("create_share", path=f"/{SHARE_FILE}", share_type=3, password="s3Cr3t!Pw9#xK")
         share = json.loads(result)
         assert share["share_type"] == 3
         assert share.get("has_password") is True
@@ -154,7 +154,7 @@ class TestCreateShare:
             "create_share",
             path=f"/{SHARE_FILE}",
             share_type=3,
-            password="secret123",
+            password="s3Cr3t!Pw9#xK",
             expire_date="2099-12-31",
             note="Review this",
             label="Full options link",
