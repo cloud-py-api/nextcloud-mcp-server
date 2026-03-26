@@ -46,7 +46,11 @@ class Config:
 
         host = os.environ.get("NEXTCLOUD_MCP_HOST", "0.0.0.0")
         port = int(os.environ.get("NEXTCLOUD_MCP_PORT", "8100"))
-        retry_max = int(os.environ.get("NEXTCLOUD_MCP_RETRY_MAX", "3"))
+        retry_raw = os.environ.get("NEXTCLOUD_MCP_RETRY_MAX", "3")
+        try:
+            retry_max = int(retry_raw)
+        except ValueError:
+            raise ValueError(f"Invalid NEXTCLOUD_MCP_RETRY_MAX='{retry_raw}'. Expected integer >= 0.") from None
 
         return cls(
             nextcloud_url=url,

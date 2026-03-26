@@ -82,10 +82,15 @@ class NextcloudClient:
             if self._config.retry_max > 0:
                 kwargs["retries"] = Retry(
                     total=self._config.retry_max,
+                    connect=0,
+                    read=0,
+                    other=0,
+                    redirect=0,
                     status_forcelist=[429, 503],
                     backoff_factor=1.0,
                     respect_retry_after_header=True,
                     allowed_methods=None,
+                    raise_on_status=False,
                 )
             self._session = niquests.AsyncSession(**kwargs)  # type: ignore[arg-type]
         return self._session

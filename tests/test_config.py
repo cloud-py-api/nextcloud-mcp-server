@@ -95,6 +95,15 @@ class TestConfigFromEnv:
         config = Config.from_env()
         assert config.retry_max == 0
 
+    def test_retry_max_invalid_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("NEXTCLOUD_URL", "http://localhost")
+        monkeypatch.setenv("NEXTCLOUD_USER", "admin")
+        monkeypatch.setenv("NEXTCLOUD_PASSWORD", "admin")
+        monkeypatch.setenv("NEXTCLOUD_MCP_RETRY_MAX", "abc")
+
+        with pytest.raises(ValueError, match="Invalid NEXTCLOUD_MCP_RETRY_MAX"):
+            Config.from_env()
+
     def test_case_insensitive_permission(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("NEXTCLOUD_URL", "http://localhost")
         monkeypatch.setenv("NEXTCLOUD_USER", "admin")

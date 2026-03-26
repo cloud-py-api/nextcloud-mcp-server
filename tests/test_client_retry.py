@@ -86,3 +86,33 @@ class TestRetryConfiguration:
             assert adapter.max_retries.backoff_factor == 1.0
         finally:
             await client.close()
+
+    @pytest.mark.asyncio
+    async def test_retry_no_connect_retries(self) -> None:
+        client = NextcloudClient(_make_config())
+        session = await client._get_session()
+        try:
+            adapter = session.get_adapter("http://localhost")
+            assert adapter.max_retries.connect == 0
+        finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    async def test_retry_no_read_retries(self) -> None:
+        client = NextcloudClient(_make_config())
+        session = await client._get_session()
+        try:
+            adapter = session.get_adapter("http://localhost")
+            assert adapter.max_retries.read == 0
+        finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    async def test_retry_raise_on_status_disabled(self) -> None:
+        client = NextcloudClient(_make_config())
+        session = await client._get_session()
+        try:
+            adapter = session.get_adapter("http://localhost")
+            assert adapter.max_retries.raise_on_status is False
+        finally:
+            await client.close()
