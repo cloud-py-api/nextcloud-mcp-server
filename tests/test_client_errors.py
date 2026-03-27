@@ -6,7 +6,11 @@ from typing import Any
 import niquests
 import pytest
 
-from nextcloud_mcp.client import NextcloudError, _raise_for_ocs_status, _raise_for_status
+from nextcloud_mcp.client import (
+    NextcloudError,
+    _raise_for_ocs_status,
+    _raise_for_status,
+)
 
 
 def _fake_response(status_code: int, body: dict[str, Any] | str | None = None) -> niquests.Response:
