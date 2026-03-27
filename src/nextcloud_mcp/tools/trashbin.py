@@ -8,7 +8,7 @@ from urllib.parse import unquote as url_unquote
 
 from mcp.server.fastmcp import FastMCP
 
-from ..annotations import DESTRUCTIVE, READONLY
+from ..annotations import ADDITIVE_IDEMPOTENT, DESTRUCTIVE, READONLY
 from ..client import DAV_NS, NC_NS, OC_NS
 from ..permissions import PermissionLevel, require_permission
 from ..state import get_client, get_config
@@ -99,7 +99,7 @@ def _register_read_tools(mcp: FastMCP) -> None:
 
 
 def _register_write_tools(mcp: FastMCP) -> None:
-    @mcp.tool(annotations=READONLY)
+    @mcp.tool(annotations=ADDITIVE_IDEMPOTENT)
     @require_permission(PermissionLevel.WRITE)
     async def restore_trash_item(trash_path: str) -> str:
         """Restore a file or folder from the trash bin to its original location.

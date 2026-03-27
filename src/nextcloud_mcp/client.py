@@ -3,6 +3,7 @@
 import contextlib
 import xml.etree.ElementTree as ET
 from typing import Any
+from urllib.parse import quote as url_quote
 
 import niquests
 from urllib3.util import Retry
@@ -275,8 +276,9 @@ class NextcloudClient:
         """Restore a trashed item by MOVEing it to the restore folder."""
         session = await self._get_session()
         user = self._config.user
-        src = f"{self._base_url}/remote.php/dav/trashbin/{user}/trash/{trash_path}"
-        dest = f"{self._base_url}/remote.php/dav/trashbin/{user}/restore/{trash_path}"
+        encoded = url_quote(trash_path, safe="/")
+        src = f"{self._base_url}/remote.php/dav/trashbin/{user}/trash/{encoded}"
+        dest = f"{self._base_url}/remote.php/dav/trashbin/{user}/restore/{encoded}"
         response = await session.request("MOVE", src, headers={"Destination": dest})
         _raise_for_status(response, f"Restore '{trash_path}'")
 
@@ -284,7 +286,8 @@ class NextcloudClient:
         """Delete a single item or empty the entire trash (if path is empty)."""
         session = await self._get_session()
         user = self._config.user
-        url = f"{self._base_url}/remote.php/dav/trashbin/{user}/trash/{trash_path}"
+        encoded = url_quote(trash_path, safe="/") if trash_path else ""
+        url = f"{self._base_url}/remote.php/dav/trashbin/{user}/trash/{encoded}"
         response = await session.delete(url)
         _raise_for_status(response, "Empty trash" if not trash_path else f"Delete '{trash_path}' from trash")
 
