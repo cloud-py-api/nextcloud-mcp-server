@@ -1,15 +1,8 @@
-"""Integration tests for Mail tools against a real Nextcloud instance with smtp4dev.
-
-These tests require:
-1. The Nextcloud Mail app with OCS API support (NC 34+ or recent Mail app)
-2. A smtp4dev container accessible at smtp4dev.ncmcp with IMAP (143) and SMTP (25)
-3. A pre-configured mail account via: occ mail:account:create admin "Test Mail" test@smtp4dev.ncmcp ...
-
-Tests are automatically skipped when the Mail OCS API is not available.
-"""
+"""Integration tests for Mail tools against a real Nextcloud instance with smtp4dev."""
 
 import asyncio
 import json
+import os
 import smtplib
 import subprocess
 import time
@@ -24,29 +17,13 @@ from .conftest import McpTestHelper
 
 pytestmark = pytest.mark.integration
 
-SMTP4DEV_API = "http://smtp4dev.ncmcp:80/smtp4dev/api"
-SMTP_HOST = "smtp4dev.ncmcp"
-SMTP_PORT = 25
-MAIL_RECIPIENT = "test@smtp4dev.ncmcp"
+SMTP4DEV_HOST = os.environ.get("SMTP4DEV_HOST", "smtp4dev.ncmcp")
+SMTP4DEV_HTTP_PORT = int(os.environ.get("SMTP4DEV_HTTP_PORT", "80"))
+SMTP4DEV_API = f"http://{SMTP4DEV_HOST}:{SMTP4DEV_HTTP_PORT}/smtp4dev/api"
+SMTP_HOST = SMTP4DEV_HOST
+SMTP_PORT = int(os.environ.get("SMTP4DEV_SMTP_PORT", "25"))
+MAIL_RECIPIENT = os.environ.get("MAIL_RECIPIENT", f"test@{SMTP4DEV_HOST}")
 UNIQUE = "mcp-test-mail"
-
-_mail_api_checked = False
-_mail_api_available = False
-
-
-@pytest.fixture(autouse=True)
-async def _skip_without_mail_api(nc_mcp: McpTestHelper) -> None:
-    """Skip all mail tests when the Mail OCS API is not available."""
-    global _mail_api_checked, _mail_api_available
-    if not _mail_api_checked:
-        _mail_api_checked = True
-        try:
-            await nc_mcp.call("list_mail_accounts")
-            _mail_api_available = True
-        except ToolError:
-            _mail_api_available = False
-    if not _mail_api_available:
-        pytest.skip("Mail OCS API not available (requires NC 34+ or recent Mail app)")
 
 
 def _smtp4dev_delete_all() -> None:
@@ -73,8 +50,11 @@ def _send_test_email(subject: str, body: str = "test body", to: str = MAIL_RECIP
 
 def _sync_mail_account(nc_mcp: McpTestHelper) -> None:
     """Trigger a mailbox sync so new messages appear in the NC database."""
+    container = os.environ.get("NC_CONTAINER", "ncmcp-nextcloud-1")
+    account_id = os.environ.get("MAIL_ACCOUNT_ID", "2")
+    cmd = f"php occ mail:account:sync {account_id}"
     subprocess.run(
-        ["docker", "exec", "ncmcp-nextcloud-1", "sudo", "-u", "www-data", "php", "occ", "mail:account:sync", "2"],
+        ["docker", "exec", container, "su", "-s", "/bin/bash", "www-data", "-c", cmd],
         capture_output=True,
         timeout=30,
         check=False,
