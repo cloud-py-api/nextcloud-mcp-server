@@ -16,7 +16,7 @@ class TestListApps:
     @pytest.mark.asyncio
     async def test_list_enabled_returns_list(self, nc_mcp: McpTestHelper) -> None:
         result = await nc_mcp.call("list_apps")
-        apps = json.loads(result)
+        apps: list[str] = json.loads(result)
         assert isinstance(apps, list)
         assert len(apps) > 0
 
