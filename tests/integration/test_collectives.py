@@ -26,12 +26,19 @@ async def _get_landing_page_id(nc_mcp: McpTestHelper, collective_id: int) -> int
     return pages[0]["id"]
 
 
+async def _destroy_collective(nc_mcp: McpTestHelper, collective_id: int) -> None:
+    """Trash + permanently delete a collective."""
+    with contextlib.suppress(Exception):
+        await nc_mcp.call("trash_collective", collective_id=collective_id)
+    with contextlib.suppress(Exception):
+        await nc_mcp.call("delete_collective", collective_id=collective_id)
+
+
 async def _cleanup_collectives(nc_mcp: McpTestHelper) -> None:
     result = await nc_mcp.call("list_collectives")
     for c in json.loads(result):
         if str(c.get("name", "")).startswith(UNIQUE):
-            with contextlib.suppress(Exception):
-                await nc_mcp.call("delete_collective", collective_id=c["id"])
+            await _destroy_collective(nc_mcp, c["id"])
 
 
 class TestListCollectives:
@@ -50,7 +57,7 @@ class TestListCollectives:
             names = [c["name"] for c in json.loads(result)]
             assert coll["name"] in names
         finally:
-            await nc_mcp.call("delete_collective", collective_id=coll["id"])
+            await _destroy_collective(nc_mcp, coll["id"])
 
     @pytest.mark.asyncio
     async def test_collective_has_required_fields(self, nc_mcp: McpTestHelper) -> None:
@@ -65,7 +72,7 @@ class TestListCollectives:
             assert "level" in c
             assert "can_edit" in c
         finally:
-            await nc_mcp.call("delete_collective", collective_id=coll["id"])
+            await _destroy_collective(nc_mcp, coll["id"])
 
 
 class TestCreateCollective:
@@ -76,7 +83,7 @@ class TestCreateCollective:
             assert coll["id"] > 0
             assert coll["name"] == f"{UNIQUE}-create"
         finally:
-            await nc_mcp.call("delete_collective", collective_id=coll["id"])
+            await _destroy_collective(nc_mcp, coll["id"])
 
     @pytest.mark.asyncio
     async def test_create_with_emoji(self, nc_mcp: McpTestHelper) -> None:
@@ -85,7 +92,7 @@ class TestCreateCollective:
         try:
             assert coll["emoji"] == "\U0001f4da"
         finally:
-            await nc_mcp.call("delete_collective", collective_id=coll["id"])
+            await _destroy_collective(nc_mcp, coll["id"])
 
     @pytest.mark.asyncio
     async def test_create_empty_name_raises(self, nc_mcp: McpTestHelper) -> None:
@@ -99,7 +106,7 @@ class TestCreateCollective:
             with pytest.raises(ToolError):
                 await nc_mcp.call("create_collective", name=coll["name"])
         finally:
-            await nc_mcp.call("delete_collective", collective_id=coll["id"])
+            await _destroy_collective(nc_mcp, coll["id"])
 
 
 class TestGetCollectivePages:
@@ -112,7 +119,7 @@ class TestGetCollectivePages:
             assert len(pages) >= 1
             assert pages[0]["title"] == "Landing page"
         finally:
-            await nc_mcp.call("delete_collective", collective_id=coll["id"])
+            await _destroy_collective(nc_mcp, coll["id"])
 
     @pytest.mark.asyncio
     async def test_page_has_required_fields(self, nc_mcp: McpTestHelper) -> None:
@@ -123,7 +130,7 @@ class TestGetCollectivePages:
             for field in ["id", "title", "timestamp", "file_name"]:
                 assert field in page, f"Missing field: {field}"
         finally:
-            await nc_mcp.call("delete_collective", collective_id=coll["id"])
+            await _destroy_collective(nc_mcp, coll["id"])
 
 
 class TestGetCollectivePage:
@@ -137,7 +144,19 @@ class TestGetCollectivePage:
             assert page["id"] == landing_id
             assert page["title"] == "Landing page"
         finally:
-            await nc_mcp.call("delete_collective", collective_id=coll["id"])
+            await _destroy_collective(nc_mcp, coll["id"])
+
+    @pytest.mark.asyncio
+    async def test_get_page_includes_tags(self, nc_mcp: McpTestHelper) -> None:
+        coll = await _create_collective(nc_mcp, "tags")
+        try:
+            landing_id = await _get_landing_page_id(nc_mcp, coll["id"])
+            result = await nc_mcp.call("get_collective_page", collective_id=coll["id"], page_id=landing_id)
+            page = json.loads(result)
+            assert "tags" in page
+            assert isinstance(page["tags"], list)
+        finally:
+            await _destroy_collective(nc_mcp, coll["id"])
 
     @pytest.mark.asyncio
     async def test_get_nonexistent_page_raises(self, nc_mcp: McpTestHelper) -> None:
@@ -146,7 +165,7 @@ class TestGetCollectivePage:
             with pytest.raises(ToolError):
                 await nc_mcp.call("get_collective_page", collective_id=coll["id"], page_id=999999)
         finally:
-            await nc_mcp.call("delete_collective", collective_id=coll["id"])
+            await _destroy_collective(nc_mcp, coll["id"])
 
 
 class TestCreateCollectivePage:
@@ -162,7 +181,7 @@ class TestCreateCollectivePage:
             assert page["title"] == "New Page"
             assert page["id"] > 0
         finally:
-            await nc_mcp.call("delete_collective", collective_id=coll["id"])
+            await _destroy_collective(nc_mcp, coll["id"])
 
     @pytest.mark.asyncio
     async def test_create_subpage(self, nc_mcp: McpTestHelper) -> None:
@@ -185,7 +204,7 @@ class TestCreateCollectivePage:
             assert "Parent" in titles
             assert "Child" in titles
         finally:
-            await nc_mcp.call("delete_collective", collective_id=coll["id"])
+            await _destroy_collective(nc_mcp, coll["id"])
 
     @pytest.mark.asyncio
     async def test_create_empty_title_raises(self, nc_mcp: McpTestHelper) -> None:
@@ -195,42 +214,93 @@ class TestCreateCollectivePage:
             with pytest.raises((ToolError, ValueError)):
                 await nc_mcp.call("create_collective_page", collective_id=coll["id"], parent_id=landing_id, title="")
         finally:
-            await nc_mcp.call("delete_collective", collective_id=coll["id"])
+            await _destroy_collective(nc_mcp, coll["id"])
 
 
-class TestDeleteCollective:
+class TestTrashAndRestoreCollective:
     @pytest.mark.asyncio
-    async def test_delete_removes_collective(self, nc_mcp: McpTestHelper) -> None:
-        coll = await _create_collective(nc_mcp, "del")
-        await nc_mcp.call("delete_collective", collective_id=coll["id"])
-        result = await nc_mcp.call("list_collectives")
-        ids = [c["id"] for c in json.loads(result)]
-        assert coll["id"] not in ids
+    async def test_trash_removes_from_list(self, nc_mcp: McpTestHelper) -> None:
+        coll = await _create_collective(nc_mcp, "trash")
+        try:
+            await nc_mcp.call("trash_collective", collective_id=coll["id"])
+            result = await nc_mcp.call("list_collectives")
+            ids = [c["id"] for c in json.loads(result)]
+            assert coll["id"] not in ids
+        finally:
+            await _destroy_collective(nc_mcp, coll["id"])
 
     @pytest.mark.asyncio
-    async def test_delete_returns_confirmation(self, nc_mcp: McpTestHelper) -> None:
-        coll = await _create_collective(nc_mcp, "delconf")
+    async def test_restore_brings_back(self, nc_mcp: McpTestHelper) -> None:
+        coll = await _create_collective(nc_mcp, "restcoll")
+        try:
+            await nc_mcp.call("trash_collective", collective_id=coll["id"])
+            result = await nc_mcp.call("restore_collective", collective_id=coll["id"])
+            restored = json.loads(result)
+            assert restored["name"] == coll["name"]
+            listed = json.loads(await nc_mcp.call("list_collectives"))
+            assert coll["id"] in [c["id"] for c in listed]
+        finally:
+            await _destroy_collective(nc_mcp, coll["id"])
+
+    @pytest.mark.asyncio
+    async def test_permanent_delete(self, nc_mcp: McpTestHelper) -> None:
+        coll = await _create_collective(nc_mcp, "permdel")
+        await nc_mcp.call("trash_collective", collective_id=coll["id"])
         result = await nc_mcp.call("delete_collective", collective_id=coll["id"])
         assert "deleted" in result.lower()
 
 
-class TestDeleteCollectivePage:
+class TestTrashAndRestorePage:
     @pytest.mark.asyncio
-    async def test_delete_page(self, nc_mcp: McpTestHelper) -> None:
-        coll = await _create_collective(nc_mcp, "delpg")
+    async def test_trash_page_removes_from_list(self, nc_mcp: McpTestHelper) -> None:
+        coll = await _create_collective(nc_mcp, "trashpg")
         try:
             landing_id = await _get_landing_page_id(nc_mcp, coll["id"])
             page = json.loads(
                 await nc_mcp.call(
-                    "create_collective_page", collective_id=coll["id"], parent_id=landing_id, title="To Delete"
+                    "create_collective_page", collective_id=coll["id"], parent_id=landing_id, title="Trash Me"
                 )
             )
-            await nc_mcp.call("delete_collective_page", collective_id=coll["id"], page_id=page["id"])
+            await nc_mcp.call("trash_collective_page", collective_id=coll["id"], page_id=page["id"])
             pages = json.loads(await nc_mcp.call("get_collective_pages", collective_id=coll["id"]))
-            ids = [p["id"] for p in pages]
-            assert page["id"] not in ids
+            assert page["id"] not in [p["id"] for p in pages]
         finally:
-            await nc_mcp.call("delete_collective", collective_id=coll["id"])
+            await _destroy_collective(nc_mcp, coll["id"])
+
+    @pytest.mark.asyncio
+    async def test_restore_page(self, nc_mcp: McpTestHelper) -> None:
+        coll = await _create_collective(nc_mcp, "restpg")
+        try:
+            landing_id = await _get_landing_page_id(nc_mcp, coll["id"])
+            page = json.loads(
+                await nc_mcp.call(
+                    "create_collective_page", collective_id=coll["id"], parent_id=landing_id, title="Restore Me"
+                )
+            )
+            await nc_mcp.call("trash_collective_page", collective_id=coll["id"], page_id=page["id"])
+            result = await nc_mcp.call("restore_collective_page", collective_id=coll["id"], page_id=page["id"])
+            restored = json.loads(result)
+            assert restored["title"] == "Restore Me"
+            pages = json.loads(await nc_mcp.call("get_collective_pages", collective_id=coll["id"]))
+            assert page["id"] in [p["id"] for p in pages]
+        finally:
+            await _destroy_collective(nc_mcp, coll["id"])
+
+    @pytest.mark.asyncio
+    async def test_permanent_delete_page(self, nc_mcp: McpTestHelper) -> None:
+        coll = await _create_collective(nc_mcp, "permdelpg")
+        try:
+            landing_id = await _get_landing_page_id(nc_mcp, coll["id"])
+            page = json.loads(
+                await nc_mcp.call(
+                    "create_collective_page", collective_id=coll["id"], parent_id=landing_id, title="Delete Me"
+                )
+            )
+            await nc_mcp.call("trash_collective_page", collective_id=coll["id"], page_id=page["id"])
+            result = await nc_mcp.call("delete_collective_page", collective_id=coll["id"], page_id=page["id"])
+            assert "deleted" in result.lower()
+        finally:
+            await _destroy_collective(nc_mcp, coll["id"])
 
 
 class TestCollectivePermissions:
@@ -245,16 +315,16 @@ class TestCollectivePermissions:
             await nc_mcp_read_only.call("create_collective", name="blocked")
 
     @pytest.mark.asyncio
-    async def test_read_only_blocks_delete(self, nc_mcp_read_only: McpTestHelper) -> None:
+    async def test_read_only_blocks_trash(self, nc_mcp_read_only: McpTestHelper) -> None:
         with pytest.raises(ToolError, match=r"requires 'destructive' permission"):
-            await nc_mcp_read_only.call("delete_collective", collective_id=1)
+            await nc_mcp_read_only.call("trash_collective", collective_id=1)
 
     @pytest.mark.asyncio
-    async def test_write_allows_create_but_blocks_delete(self, nc_mcp_write: McpTestHelper) -> None:
+    async def test_write_allows_create_but_blocks_trash(self, nc_mcp_write: McpTestHelper) -> None:
         result = await nc_mcp_write.call("create_collective", name=f"{UNIQUE}-perm")
         coll = json.loads(result)
         with pytest.raises(ToolError, match=r"requires 'destructive' permission"):
-            await nc_mcp_write.call("delete_collective", collective_id=coll["id"])
+            await nc_mcp_write.call("trash_collective", collective_id=coll["id"])
         client = nc_mcp_write.client
         await client.ocs_delete(f"apps/collectives/api/v1.0/collectives/{coll['id']}")
         await client.ocs_delete(f"apps/collectives/api/v1.0/collectives/trash/{coll['id']}")

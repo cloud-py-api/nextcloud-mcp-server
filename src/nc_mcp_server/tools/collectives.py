@@ -26,7 +26,7 @@ def _format_collective(c: dict[str, Any]) -> dict[str, Any]:
 
 
 def _format_page(p: dict[str, Any]) -> dict[str, Any]:
-    result: dict[str, Any] = {
+    return {
         "id": p["id"],
         "title": p.get("title", ""),
         "emoji": p.get("emoji"),
@@ -35,12 +35,8 @@ def _format_page(p: dict[str, Any]) -> dict[str, Any]:
         "file_name": p.get("fileName"),
         "file_path": p.get("filePath"),
         "last_user_id": p.get("lastUserId"),
+        "tags": p.get("tags", []),
     }
-    if p.get("content") is not None:
-        result["content"] = p["content"]
-    if p.get("tags"):
-        result["tags"] = p["tags"]
-    return result
 
 
 def _register_read_tools(mcp: FastMCP) -> None:
@@ -157,11 +153,12 @@ def _register_write_tools(mcp: FastMCP) -> None:
 def _register_destructive_tools(mcp: FastMCP) -> None:
     @mcp.tool(annotations=DESTRUCTIVE)
     @require_permission(PermissionLevel.DESTRUCTIVE)
-    async def delete_collective(collective_id: int) -> str:
-        """Delete a collective permanently (trash + permanent delete).
+    async def trash_collective(collective_id: int) -> str:
+        """Move a collective to the trash.
 
-        This moves the collective to trash, then permanently deletes it
-        along with all its pages. This action is irreversible.
+        The collective and its pages are soft-deleted. Use
+        restore_collective to undo, or delete_collective to
+        permanently remove it.
 
         Args:
             collective_id: The numeric collective ID.
@@ -171,28 +168,97 @@ def _register_destructive_tools(mcp: FastMCP) -> None:
         """
         client = get_client()
         await client.ocs_delete(f"{API}/collectives/{collective_id}")
+        return f"Collective {collective_id} moved to trash."
+
+    @mcp.tool(annotations=ADDITIVE)
+    @require_permission(PermissionLevel.WRITE)
+    async def restore_collective(collective_id: int) -> str:
+        """Restore a collective from the trash.
+
+        Args:
+            collective_id: The numeric collective ID (from list_collectives or prior trash operation).
+
+        Returns:
+            JSON object with the restored collective details.
+        """
+        client = get_client()
+        data = await client.ocs_patch(f"{API}/collectives/trash/{collective_id}")
+        collective = data.get("collective", data)
+        return json.dumps(_format_collective(collective), indent=2, default=str)
+
+    @mcp.tool(annotations=DESTRUCTIVE)
+    @require_permission(PermissionLevel.DESTRUCTIVE)
+    async def delete_collective(collective_id: int) -> str:
+        """Permanently delete a collective from the trash.
+
+        The collective must be in the trash first (use trash_collective).
+        This action is irreversible — all pages are permanently removed.
+
+        Args:
+            collective_id: The numeric collective ID.
+
+        Returns:
+            Confirmation message.
+        """
+        client = get_client()
         await client.ocs_delete(f"{API}/collectives/trash/{collective_id}")
         return f"Collective {collective_id} deleted permanently."
 
     @mcp.tool(annotations=DESTRUCTIVE)
     @require_permission(PermissionLevel.DESTRUCTIVE)
-    async def delete_collective_page(collective_id: int, page_id: int) -> str:
-        """Delete a page from a collective permanently (trash + permanent delete).
+    async def trash_collective_page(collective_id: int, page_id: int) -> str:
+        """Move a page to the collective's trash.
 
-        This removes the page and its content. This action is irreversible.
-        The landing page of a collective cannot be deleted.
+        The page is soft-deleted. Use restore_collective_page to undo,
+        or delete_collective_page to permanently remove it.
+        The landing page cannot be trashed.
 
         Args:
             collective_id: The numeric collective ID.
-            page_id: The numeric page ID to delete.
+            page_id: The numeric page ID.
 
         Returns:
             Confirmation message.
         """
         client = get_client()
         await client.ocs_delete(f"{API}/collectives/{collective_id}/pages/{page_id}")
+        return f"Page {page_id} moved to trash."
+
+    @mcp.tool(annotations=ADDITIVE)
+    @require_permission(PermissionLevel.WRITE)
+    async def restore_collective_page(collective_id: int, page_id: int) -> str:
+        """Restore a page from the collective's trash.
+
+        Args:
+            collective_id: The numeric collective ID.
+            page_id: The numeric page ID.
+
+        Returns:
+            JSON object with the restored page details.
+        """
+        client = get_client()
+        data = await client.ocs_patch(f"{API}/collectives/{collective_id}/pages/trash/{page_id}")
+        page = data.get("page", data)
+        return json.dumps(_format_page(page), indent=2, default=str)
+
+    @mcp.tool(annotations=DESTRUCTIVE)
+    @require_permission(PermissionLevel.DESTRUCTIVE)
+    async def delete_collective_page(collective_id: int, page_id: int) -> str:
+        """Permanently delete a page from the collective's trash.
+
+        The page must be in the trash first (use trash_collective_page).
+        This action is irreversible.
+
+        Args:
+            collective_id: The numeric collective ID.
+            page_id: The numeric page ID.
+
+        Returns:
+            Confirmation message.
+        """
+        client = get_client()
         await client.ocs_delete(f"{API}/collectives/{collective_id}/pages/trash/{page_id}")
-        return f"Page {page_id} deleted permanently from collective {collective_id}."
+        return f"Page {page_id} deleted permanently."
 
 
 def register(mcp: FastMCP) -> None:
