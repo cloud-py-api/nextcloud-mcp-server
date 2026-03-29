@@ -154,8 +154,8 @@ class TestSessionCacheRegularPassword:
 
 class TestSessionCacheAppPassword:
     @pytest.mark.asyncio
-    async def test_app_password_auth_preserved(self) -> None:
-        """With an app password, auth should remain set (session or Basic Auth)."""
+    async def test_app_password_auth_works(self) -> None:
+        """With an app password, all operations should work."""
         app_pwd = _create_app_password()
         client = NextcloudClient(_make_config(password=app_pwd))
         try:

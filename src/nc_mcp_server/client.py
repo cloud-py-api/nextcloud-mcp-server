@@ -138,10 +138,9 @@ class NextcloudClient:
         Subsequent requests reuse the session cookie, which is validated via a
         fast DB lookup instead of bcrypt.
 
-        When the user provides an app password, NC does NOT create a session
-        token (the app password itself is the fast token).  In that case we
-        detect the missing session and keep Basic Auth in place — app passwords
-        are already fast, so there is nothing to optimise.
+        When the user provides an app password, session caching still works
+        (NC stores the app password in the PHP session), and the overhead of
+        the two init requests is negligible.
         """
         if self._session is None:
             return
