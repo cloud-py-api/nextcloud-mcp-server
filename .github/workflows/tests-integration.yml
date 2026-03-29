@@ -49,7 +49,7 @@ jobs:
           $OCC config:system:set loglevel --value=0 --type=integer
           $OCC config:system:set ratelimit_overwrite files_sharing.shareapi.createshare user limit --value=1000 --type=integer
           $OCC config:system:set ratelimit_overwrite files_sharing.shareapi.createshare user period --value=60 --type=integer
-          $OCC config:system:set memcache.local '\\OC\\Memcache\\APCu'
+          $OCC config:system:set memcache.local '\OC\Memcache\APCu'
           $OCC app:install spreed || echo "spreed already installed"
           $OCC app:install announcementcenter || echo "announcementcenter already installed"
           $OCC app:install mail
@@ -59,6 +59,21 @@ jobs:
           $OCC mail:account:sync 1
           $OCC app:list | head -40
 
+      - name: Verify PHP and Nextcloud config
+        working-directory: .github
+        run: |
+          OCC="docker compose -f docker-compose.ci.yml exec -T nextcloud php occ"
+          echo "=== PHP OPcache settings ==="
+          docker compose -f docker-compose.ci.yml exec -T nextcloud php -i | grep -E "opcache\.(validate_timestamps|jit_buffer_size|memory_consumption|max_accelerated)"
+          echo "=== PHP-FPM pool ==="
+          docker compose -f docker-compose.ci.yml exec -T nextcloud cat /usr/local/etc/php-fpm.d/zz-ci.conf
+          echo "=== APCu ==="
+          docker compose -f docker-compose.ci.yml exec -T nextcloud php -i | grep "apc.shm_size"
+          echo "=== NC memcache config ==="
+          $OCC config:system:get memcache.local
+          echo "=== NC status ==="
+          curl -sf http://localhost:8080/status.php | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'NC {d[\"versionstring\"]} installed={d[\"installed\"]}')"
+
       - name: Warm up OPcache
         run: |
           for i in $(seq 1 5); do
@@ -66,10 +81,6 @@ jobs:
             curl -sf -u admin:admin -H "OCS-APIRequest: true" -H "Accept: application/json" \
               http://localhost:8080/ocs/v2.php/cloud/capabilities > /dev/null
           done
-
-      - name: Verify Nextcloud is accessible
-        run: |
-          curl -sf http://localhost:8080/status.php | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'NC {d[\"versionstring\"]} installed={d[\"installed\"]}')"
 
       - name: Run integration tests
         env:
