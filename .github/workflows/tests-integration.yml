@@ -17,13 +17,13 @@ jobs:
         include:
           - nc-branch: stable32
             php-version: "8.2"
-            spreed-branch: stable32
+            apps-branch: stable32
           - nc-branch: stable33
             php-version: "8.3"
-            spreed-branch: stable33
+            apps-branch: stable33
           - nc-branch: master
             php-version: "8.3"
-            spreed-branch: main
+            apps-branch: main
 
     services:
       postgres:
@@ -89,22 +89,49 @@ jobs:
           ref: ${{ matrix.nc-branch }}
           path: nc-server
 
-      - name: Checkout Nextcloud apps
-        run: |
-          cd nc-server
-          git clone --depth 1 --branch ${{ matrix.nc-branch }} https://github.com/nextcloud/notifications.git apps/notifications
-          git clone --depth 1 --branch ${{ matrix.nc-branch }} https://github.com/nextcloud/activity.git apps/activity
-          git clone --depth 1 --branch ${{ matrix.spreed-branch }} https://github.com/nextcloud/spreed.git apps/spreed
-          git clone --depth 1 --branch main https://github.com/nextcloud/announcementcenter.git apps/announcementcenter
-          git clone --depth 1 --branch main https://github.com/nextcloud/mail.git apps/mail
+      - name: Checkout notifications
+        uses: actions/checkout@v4
+        with:
+          repository: nextcloud/notifications
+          ref: ${{ matrix.nc-branch }}
+          path: nc-server/apps/notifications
+
+      - name: Checkout activity
+        uses: actions/checkout@v4
+        with:
+          repository: nextcloud/activity
+          ref: ${{ matrix.nc-branch }}
+          path: nc-server/apps/activity
+
+      - name: Checkout spreed
+        uses: actions/checkout@v4
+        with:
+          repository: nextcloud/spreed
+          ref: ${{ matrix.apps-branch }}
+          path: nc-server/apps/spreed
+
+      - name: Checkout announcementcenter
+        uses: actions/checkout@v4
+        with:
+          repository: nextcloud/announcementcenter
+          ref: main
+          path: nc-server/apps/announcementcenter
+
+      - name: Checkout mail
+        uses: actions/checkout@v4
+        with:
+          repository: nextcloud/mail
+          ref: main
+          path: nc-server/apps/mail
 
       - name: Install app dependencies
         working-directory: nc-server
         run: |
           for app in apps/notifications apps/activity apps/spreed apps/announcementcenter apps/mail; do
             if [ -f "$app/composer.json" ]; then
-              echo "Installing composer deps for $app"
-              composer install --no-dev --working-dir="$app" 2>&1 | tail -3
+              echo "::group::composer install $app"
+              composer install --no-dev --working-dir="$app"
+              echo "::endgroup::"
             fi
           done
 
@@ -149,6 +176,7 @@ jobs:
           SMTP4DEV_SMTP_PORT: "9025"
           MAIL_RECIPIENT: test@localhost
           MAIL_ACCOUNT_ID: "1"
+          NC_SERVER_DIR: ${{ github.workspace }}/nc-server
         run: pytest tests/integration/ -v -m integration --ignore=tests/integration/test_session_cache.py --cov=nc_mcp_server --cov-report=xml:coverage-integration.xml
 
       - name: Run session cache tests
