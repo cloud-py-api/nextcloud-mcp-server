@@ -17,10 +17,13 @@ jobs:
         include:
           - nc-branch: stable32
             php-version: "8.2"
+            spreed-branch: stable32
           - nc-branch: stable33
             php-version: "8.3"
+            spreed-branch: stable33
           - nc-branch: master
             php-version: "8.3"
+            spreed-branch: main
 
     services:
       postgres:
@@ -91,7 +94,7 @@ jobs:
           cd nc-server
           git clone --depth 1 --branch ${{ matrix.nc-branch }} https://github.com/nextcloud/notifications.git apps/notifications
           git clone --depth 1 --branch ${{ matrix.nc-branch }} https://github.com/nextcloud/activity.git apps/activity
-          git clone --depth 1 --branch ${{ matrix.nc-branch }} https://github.com/nextcloud/spreed.git apps/spreed
+          git clone --depth 1 --branch ${{ matrix.spreed-branch }} https://github.com/nextcloud/spreed.git apps/spreed
           git clone --depth 1 --branch main https://github.com/nextcloud/announcementcenter.git apps/announcementcenter
           git clone --depth 1 --branch main https://github.com/nextcloud/mail.git apps/mail
 
@@ -107,7 +110,7 @@ jobs:
           php occ config:system:set debug --value=true --type=boolean
           php occ config:system:set ratelimit.protection.enabled --value=false --type=boolean
           php occ config:system:set auth.bruteforce.protection.enabled --value=false --type=boolean
-          php occ config:system:set memcache.local --value='\\OC\\Memcache\\APCu'
+          php occ config:system:set memcache.local --value='\OC\Memcache\APCu'
           php occ config:system:set overwrite.cli.url --value="http://localhost:8080"
           php occ app:enable notifications
           php occ app:enable activity
