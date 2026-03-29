@@ -54,7 +54,13 @@ class Config:
         except ValueError:
             raise ValueError(f"Invalid NEXTCLOUD_MCP_RETRY_MAX='{retry_raw}'. Expected integer >= 0.") from None
 
-        is_app_password = os.environ.get("NEXTCLOUD_MCP_APP_PASSWORD", "").lower() in ("true", "1", "yes")
+        app_pw_raw = os.environ.get("NEXTCLOUD_MCP_APP_PASSWORD", "").strip().lower()
+        if app_pw_raw in ("", "false", "0", "no"):
+            is_app_password = False
+        elif app_pw_raw in ("true", "1", "yes"):
+            is_app_password = True
+        else:
+            raise ValueError(f"Invalid NEXTCLOUD_MCP_APP_PASSWORD='{app_pw_raw}'. Expected: true/false, 1/0, yes/no.")
 
         return cls(
             nextcloud_url=url,
