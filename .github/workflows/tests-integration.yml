@@ -162,70 +162,11 @@ jobs:
 
       - name: Set up PHP-FPM and nginx
         run: |
-          PHP_VERSION=${{ matrix.php-version }}
-          NC_ROOT=${{ github.workspace }}/nc-server
-
-          # Configure PHP-FPM pool
-          sudo tee /etc/php/$PHP_VERSION/fpm/pool.d/nextcloud.conf > /dev/null <<FPMEOF
-          [nextcloud]
-          user = runner
-          group = runner
-          listen = /run/php/nc-fpm.sock
-          listen.owner = www-data
-          listen.group = www-data
-          pm = static
-          pm.max_children = 8
-          php_admin_value[memory_limit] = 512M
-          php_admin_value[apc.enable_cli] = 1
-          FPMEOF
-
-          # Restart PHP-FPM to pick up the pool
-          sudo systemctl restart php$PHP_VERSION-fpm
-
-          # Install and configure nginx
+          sudo cp .github/ci-fpm-pool.conf /etc/php/${{ matrix.php-version }}/fpm/pool.d/nextcloud.conf
+          sudo systemctl restart php${{ matrix.php-version }}-fpm
           sudo apt-get -y install nginx > /dev/null 2>&1
-          sudo tee /etc/nginx/sites-enabled/nextcloud.conf > /dev/null <<NGEOF
-          upstream php-handler {
-              server unix:/run/php/nc-fpm.sock;
-          }
-          server {
-              listen 8080;
-              root $NC_ROOT;
-              client_max_body_size 512M;
-              location = /robots.txt { allow all; log_not_found off; access_log off; }
-              location ^~ /.well-known {
-                  location = /.well-known/carddav { return 301 /remote.php/dav/; }
-                  location = /.well-known/caldav  { return 301 /remote.php/dav/; }
-                  return 301 /index.php\$request_uri;
-              }
-              location ~ ^/(?:build|tests|config|lib|3rdparty|templates|data)(?:$|/) { return 404; }
-              location ~ ^/(?:\.|autotest|occ|issue|indie|db_|console) { return 404; }
-              location ~ \.php(?:$|/) {
-                  rewrite ^/(?!index|remote|public|cron|core\/ajax\/update|status|ocs\/v[12]|updater\/.+|ocs-provider\/.+|.+\/richdocumentscode(_arm64)?\/proxy) /index.php\$request_uri;
-                  fastcgi_split_path_info ^(.+?\.php)(/.*)$;
-                  set \$path_info \$fastcgi_path_info;
-                  try_files \$fastcgi_script_name =404;
-                  include fastcgi_params;
-                  fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-                  fastcgi_param PATH_INFO \$path_info;
-                  fastcgi_param HTTPS off;
-                  fastcgi_param modHeadersAvailable true;
-                  fastcgi_param front_controller_active true;
-                  fastcgi_pass php-handler;
-                  fastcgi_intercept_errors on;
-                  fastcgi_request_buffering off;
-                  fastcgi_read_timeout 600;
-              }
-              location ~ \.(?:css|js|svg|gif|png|jpg|ico|wasm|tflite|map|ogg|flac)$ {
-                  try_files \$uri /index.php\$request_uri;
-                  expires 6M;
-                  access_log off;
-              }
-              location / {
-                  try_files \$uri \$uri/ /index.php\$request_uri;
-              }
-          }
-          NGEOF
+          sed "s|NC_ROOT|${{ github.workspace }}/nc-server|" .github/ci-nginx.conf \
+            | sudo tee /etc/nginx/sites-enabled/nextcloud.conf > /dev/null
           sudo rm -f /etc/nginx/sites-enabled/default
           sudo nginx -t
           sudo systemctl restart nginx
