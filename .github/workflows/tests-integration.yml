@@ -51,7 +51,6 @@ jobs:
           $OCC config:system:set ratelimit_overwrite files_sharing.shareapi.createshare user period --value=60 --type=integer
           $OCC config:system:set memcache.local '\\OC\\Memcache\\APCu'
           $OCC app:install spreed || echo "spreed already installed"
-          $OCC app:install admin_notifications || echo "admin_notifications already installed"
           $OCC app:install announcementcenter || echo "announcementcenter already installed"
           $OCC app:install mail
           SMTP4DEV_IP=$(docker compose -f docker-compose.ci.yml exec -T smtp4dev hostname -i | tr -d '[:space:]')
