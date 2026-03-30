@@ -171,6 +171,65 @@ class TestCreateEvent:
         await nc_mcp.call("delete_event", calendar_id=CAL_ID, event_uid=created["uid"])
 
     @pytest.mark.asyncio
+    async def test_create_recurring_weekly(self, nc_mcp: McpTestHelper) -> None:
+        result = await nc_mcp.call(
+            "create_event",
+            calendar_id=CAL_ID,
+            summary="mcp-test-weekly",
+            start="2027-06-02T10:00:00Z",
+            end="2027-06-02T11:00:00Z",
+            rrule="FREQ=WEEKLY;COUNT=4",
+        )
+        created = json.loads(result)
+        event = json.loads(await nc_mcp.call("get_event", calendar_id=CAL_ID, event_uid=created["uid"]))
+        assert "rrule" in event
+        assert "WEEKLY" in event["rrule"]
+        assert "COUNT=4" in event["rrule"]
+
+        await nc_mcp.call("delete_event", calendar_id=CAL_ID, event_uid=created["uid"])
+
+    @pytest.mark.asyncio
+    async def test_create_recurring_daily_with_until(self, nc_mcp: McpTestHelper) -> None:
+        result = await nc_mcp.call(
+            "create_event",
+            calendar_id=CAL_ID,
+            summary="mcp-test-daily",
+            start="2027-07-01T09:00:00Z",
+            end="2027-07-01T09:30:00Z",
+            rrule="FREQ=DAILY;UNTIL=20270705T235959Z",
+        )
+        created = json.loads(result)
+        events = json.loads(
+            await nc_mcp.call(
+                "get_events",
+                calendar_id=CAL_ID,
+                start="2027-07-01T00:00:00Z",
+                end="2027-07-31T23:59:59Z",
+            )
+        )
+        matching = [e for e in events if e["uid"] == created["uid"]]
+        assert len(matching) >= 1
+
+        await nc_mcp.call("delete_event", calendar_id=CAL_ID, event_uid=created["uid"])
+
+    @pytest.mark.asyncio
+    async def test_create_recurring_monthly_byday(self, nc_mcp: McpTestHelper) -> None:
+        result = await nc_mcp.call(
+            "create_event",
+            calendar_id=CAL_ID,
+            summary="mcp-test-monthly",
+            start="2027-08-01T14:00:00Z",
+            end="2027-08-01T15:00:00Z",
+            rrule="FREQ=MONTHLY;BYMONTHDAY=1;COUNT=3",
+        )
+        created = json.loads(result)
+        event = json.loads(await nc_mcp.call("get_event", calendar_id=CAL_ID, event_uid=created["uid"]))
+        assert "MONTHLY" in event["rrule"]
+        assert "BYMONTHDAY=1" in event["rrule"]
+
+        await nc_mcp.call("delete_event", calendar_id=CAL_ID, event_uid=created["uid"])
+
+    @pytest.mark.asyncio
     async def test_create_invalid_status_raises(self, nc_mcp: McpTestHelper) -> None:
         with pytest.raises((ToolError, ValueError)):
             await nc_mcp.call(

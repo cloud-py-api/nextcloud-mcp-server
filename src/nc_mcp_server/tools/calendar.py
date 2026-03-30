@@ -229,6 +229,7 @@ def _build_ical(
     location: str = "",
     status: str = "CONFIRMED",
     categories: list[str] | None = None,
+    rrule: str = "",
 ) -> str:
     """Build a minimal iCalendar VEVENT string."""
     cal = ICal()
@@ -248,8 +249,27 @@ def _build_ical(
         event.add("status", status)
     if categories:
         event.add("categories", categories)
+    if rrule:
+        event.add("rrule", _parse_rrule(rrule))
     cal.add_component(event)
     return cal.to_ical().decode()
+
+
+def _parse_rrule(rrule_str: str) -> dict[str, list[Any]]:
+    """Parse an RRULE string like 'FREQ=WEEKLY;COUNT=4;BYDAY=MO,WE' into a dict."""
+    result: dict[str, list[Any]] = {}
+    for part in rrule_str.split(";"):
+        if "=" not in part:
+            continue
+        key, val = part.split("=", 1)
+        key = key.strip()
+        if key == "UNTIL":
+            result[key] = [datetime.fromisoformat(val.strip())]
+        elif key in {"COUNT", "INTERVAL"}:
+            result[key] = [int(val.strip())]
+        else:
+            result[key] = [v.strip() for v in val.split(",")]
+    return result
 
 
 def _validate_status(status: str) -> str:
@@ -424,6 +444,7 @@ def _register_create_event(mcp: FastMCP) -> None:
         location: str = "",
         status: str = "CONFIRMED",
         categories: str = "",
+        rrule: str = "",
     ) -> str:
         """Create a new calendar event.
 
@@ -440,6 +461,9 @@ def _register_create_event(mcp: FastMCP) -> None:
             location: Optional event location.
             status: Event status: "CONFIRMED" (default), "TENTATIVE", or "CANCELLED".
             categories: Optional comma-separated category names (e.g. "Work,Meeting").
+            rrule: Optional recurrence rule in iCalendar RRULE format.
+                   Examples: "FREQ=DAILY;COUNT=5", "FREQ=WEEKLY;BYDAY=MO,WE,FR",
+                   "FREQ=MONTHLY;BYMONTHDAY=15;UNTIL=20261231T235959Z".
 
         Returns:
             JSON object with the created event's uid and summary.
@@ -455,7 +479,7 @@ def _register_create_event(mcp: FastMCP) -> None:
             dtend = dtstart + timedelta(hours=1)
 
         uid = str(uuid.uuid4())
-        ical_data = _build_ical(uid, summary, dtstart, dtend, description, location, status_upper, cat_list)
+        ical_data = _build_ical(uid, summary, dtstart, dtend, description, location, status_upper, cat_list, rrule)
         client = get_client()
         user = get_config().user
         path = _caldav_path(user, calendar_id, f"{uid}.ics")
