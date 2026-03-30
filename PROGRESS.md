@@ -1,6 +1,6 @@
 # Nextcloud MCP Server — Development Progress
 
-## Current Phase: 2 — Communication
+## Current Phase: 3 — Groupware
 
 ### Completed
 - [x] Project scaffold: pyproject.toml, src layout, config, permissions, client (2026-03-20)
@@ -33,6 +33,7 @@
 - [x] Collectives tools: list_collectives, get_collective_pages, get_collective_page (2026-03-29)
 - [x] App Management tools: list_apps, get_app_info, enable_app, disable_app (2026-03-30)
 - [x] User-permission integration tests: non-admin error handling validation (2026-03-30)
+- [x] Calendar tools: list_calendars, get_events, get_event, create_event, update_event, delete_event (2026-03-30)
 
 ### In Progress
 
@@ -40,16 +41,19 @@
 (none)
 
 ### Next Up
-- Phase 3 — Groupware (Calendar, Contacts, Tasks, Deck, Notes)
+- Contacts, Tasks, Deck, Notes
 
 ## Phases
 
 | Phase | Focus | Status |
 |-------|-------|--------|
-| 1 | Core (Files, Users, Notifications, Activity) | In Progress |
-| 2 | Communication (Talk) | In Progress |
-| 3 | Collaboration (Shares, Calendar, Contacts, Deck) | Not Started |
-| 4 | Advanced (Search, Status, Apps) | Not Started |
+| 1 | Core (Files, Users, Notifications, Activity) | Complete |
+| 2 | Communication (Talk, Announcements, Mail) | Complete |
+| 3 | Groupware (Calendar, Contacts, Tasks, Deck, Notes) | In Progress |
+| 4 | Collaboration (Collectives, Forms, Polls, Tables) | Not Started |
+| 5 | Storage & Search | Not Started |
+| 6 | Media & Data | Not Started |
+| 7 | Advanced & Admin (App Management, etc.) | In Progress |
 
 ## Test Coverage
 
@@ -71,6 +75,7 @@
 | Mail | 5 | 29 |
 | Collectives | 3 | 22 |
 | App Management | 4 | 14 |
+| Calendar | 6 | 44 |
 | User Permissions | — | 15 |
 | Server | — | 7 |
 | Permissions | — | 34 |
@@ -78,4 +83,4 @@
 | Client | — | 29 |
 | Config | — | 17 |
 | State | — | 2 |
-| **Total** | **67** | **542** |
+| **Total** | **73** | **586** |
