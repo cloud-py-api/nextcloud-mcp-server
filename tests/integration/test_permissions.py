@@ -38,7 +38,7 @@ class TestReadOnlyPermissions:
 
     @pytest.mark.asyncio
     async def test_list_notifications_allowed(self, nc_mcp_read_only: McpTestHelper) -> None:
-        result = await nc_mcp_read_only.call("list_notifications")
+        result = await nc_mcp_read_only.call("list_notifications", limit=200)
         data = json.loads(result)["data"]
         assert isinstance(data, list)
 

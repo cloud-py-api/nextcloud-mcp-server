@@ -17,7 +17,7 @@ CAL_ID = "personal"
 @pytest.fixture(autouse=True)
 async def _cleanup_test_events(nc_mcp: McpTestHelper) -> None:
     """Delete any leftover test events before each test."""
-    result = await nc_mcp.call("get_events", calendar_id=CAL_ID)
+    result = await nc_mcp.call("get_events", calendar_id=CAL_ID, limit=200)
     for event in json.loads(result)["data"]:
         uid = event["uid"]
         if uid.startswith("mcp-test-") or "mcp-test" in event.get("summary", ""):
@@ -254,7 +254,7 @@ class TestCreateEvent:
 class TestGetEvents:
     @pytest.mark.asyncio
     async def test_get_empty_calendar(self, nc_mcp: McpTestHelper) -> None:
-        result = await nc_mcp.call("get_events", calendar_id=CAL_ID)
+        result = await nc_mcp.call("get_events", calendar_id=CAL_ID, limit=200)
         events = json.loads(result)["data"]
         assert isinstance(events, list)
 
@@ -269,7 +269,7 @@ class TestGetEvents:
                 end="2026-09-01T11:00:00Z",
             )
         )
-        result = await nc_mcp.call("get_events", calendar_id=CAL_ID)
+        result = await nc_mcp.call("get_events", calendar_id=CAL_ID, limit=200)
         events = json.loads(result)["data"]
         uids = [e["uid"] for e in events]
         assert created["uid"] in uids
@@ -326,7 +326,7 @@ class TestGetEvents:
                 start="2026-10-01T10:00:00Z",
             )
         )
-        result = await nc_mcp.call("get_events", calendar_id=CAL_ID)
+        result = await nc_mcp.call("get_events", calendar_id=CAL_ID, limit=200)
         events = json.loads(result)["data"]
         matching = [e for e in events if e["uid"] == created["uid"]]
         assert len(matching) == 1
@@ -535,7 +535,7 @@ class TestCalendarPermissions:
 
     @pytest.mark.asyncio
     async def test_read_only_allows_get_events(self, nc_mcp_read_only: McpTestHelper) -> None:
-        result = await nc_mcp_read_only.call("get_events", calendar_id=CAL_ID)
+        result = await nc_mcp_read_only.call("get_events", calendar_id=CAL_ID, limit=200)
         assert isinstance(json.loads(result)["data"], list)
 
     @pytest.mark.asyncio
