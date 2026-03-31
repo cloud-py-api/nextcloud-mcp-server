@@ -106,6 +106,7 @@ pythonVersion = "3.12"
 typeCheckingMode = "strict"
 venvPath = "."
 venv = "venv"
+exclude = [ "scripts" ]
 reportUnusedFunction = false
 reportPrivateUsage = false
 executionEnvironments = [
