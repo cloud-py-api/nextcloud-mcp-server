@@ -146,7 +146,7 @@ def _register_read_tools(mcp: FastMCP) -> None:
 
         Returns:
             JSON object with "data" (list of matching files) and "pagination"
-            (count, offset, has_more).
+            (count, offset, limit, has_more).
         """
         if not query and not mimetype:
             raise ValueError("At least one of 'query' or 'mimetype' must be provided.")
