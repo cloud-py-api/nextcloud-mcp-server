@@ -275,6 +275,8 @@ def _strip_updated_fields(lines: list[str], skip_fields: set[str]) -> list[str]:
 def _apply_contact_updates(vcard_data: str, updates: dict[str, Any]) -> str:
     """Apply partial field updates to existing vCard data, return new vCard string."""
     skip_fields = {field for key, field in _UPDATE_FIELD_MAP if key in updates}
+    if ("given_name" in updates or "family_name" in updates) and "full_name" not in updates:
+        skip_fields.add("FN")
     new_lines = _strip_updated_fields(vcard_data.strip().split("\n"), skip_fields)
     insert_before = len(new_lines) - 1
     if updates.get("full_name"):

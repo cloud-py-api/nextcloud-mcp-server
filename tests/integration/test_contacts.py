@@ -7,6 +7,8 @@ from typing import Any
 import pytest
 from mcp.server.fastmcp.exceptions import ToolError
 
+from nc_mcp_server.state import get_config
+
 from .conftest import McpTestHelper
 
 pytestmark = pytest.mark.integration
@@ -263,6 +265,211 @@ class TestUpdateContact:
     async def test_update_nonexistent_uid_raises(self, nc_mcp: McpTestHelper) -> None:
         with pytest.raises((ToolError, ValueError)):
             await nc_mcp.call("update_contact", uid="nonexistent-uid-xyz", etag="fake", title="Nope", book_id=BOOK_ID)
+
+
+async def _put_vcard_with_categories(nc_mcp: McpTestHelper, suffix: str, categories: list[str]) -> str:
+    """Create a test contact with CATEGORIES via direct CardDAV PUT. Returns UID."""
+    uid = f"mcp-cat-{suffix}"
+    full_name = f"{PREFIX}-cat-{suffix}"
+    lines = [
+        "BEGIN:VCARD",
+        "VERSION:3.0",
+        f"UID:{uid}",
+        f"FN:{full_name}",
+        f"N:;{full_name};;;",
+    ]
+    if categories:
+        lines.append(f"CATEGORIES:{','.join(categories)}")
+    lines.append("END:VCARD")
+    vcard = "\r\n".join(lines) + "\r\n"
+    config = get_config()
+    await nc_mcp.client.dav_request(
+        "PUT",
+        f"addressbooks/users/{config.user}/{BOOK_ID}/{uid}.vcf",
+        body=vcard,
+        headers={"Content-Type": "text/vcard; charset=utf-8"},
+        context=f"Create test contact '{uid}'",
+    )
+    return uid
+
+
+class TestContactCategories:
+    @pytest.mark.asyncio
+    async def test_single_category(self, nc_mcp: McpTestHelper) -> None:
+        uid = await _put_vcard_with_categories(nc_mcp, "single", ["Work"])
+        contact = json.loads(await nc_mcp.call("get_contact", uid=uid, book_id=BOOK_ID))
+        assert contact["categories"] == ["Work"]
+
+    @pytest.mark.asyncio
+    async def test_multiple_categories(self, nc_mcp: McpTestHelper) -> None:
+        uid = await _put_vcard_with_categories(nc_mcp, "multi", ["Work", "VIP", "Family"])
+        contact = json.loads(await nc_mcp.call("get_contact", uid=uid, book_id=BOOK_ID))
+        assert set(contact["categories"]) == {"Work", "VIP", "Family"}
+
+    @pytest.mark.asyncio
+    async def test_no_categories_omits_field(self, nc_mcp: McpTestHelper) -> None:
+        contact = await _create(nc_mcp, "cat-none")
+        fetched = json.loads(await nc_mcp.call("get_contact", uid=contact["uid"], book_id=BOOK_ID))
+        assert "categories" not in fetched
+
+    @pytest.mark.asyncio
+    async def test_categories_in_listing(self, nc_mcp: McpTestHelper) -> None:
+        uid = await _put_vcard_with_categories(nc_mcp, "list", ["Colleague", "Friend"])
+        result = json.loads(await nc_mcp.call("get_contacts", book_id=BOOK_ID, limit=200))
+        match = next(c for c in result["data"] if c["uid"] == uid)
+        assert set(match["categories"]) == {"Colleague", "Friend"}
+
+    @pytest.mark.asyncio
+    async def test_unicode_categories(self, nc_mcp: McpTestHelper) -> None:
+        uid = await _put_vcard_with_categories(nc_mcp, "unicode", ["Arbeit", "Famille", "友達"])
+        contact = json.loads(await nc_mcp.call("get_contact", uid=uid, book_id=BOOK_ID))
+        assert set(contact["categories"]) == {"Arbeit", "Famille", "友達"}
+
+
+async def _put_vcard_with_name(nc_mcp: McpTestHelper, suffix: str, given: str = "", family: str = "") -> str:
+    """Create a test contact with a structured N field via direct CardDAV PUT. Returns UID."""
+    uid = f"mcp-name-{suffix}"
+    full_name = f"{PREFIX}-{suffix}"
+    n_parts = f"{family};{given};;;"
+    lines = [
+        "BEGIN:VCARD",
+        "VERSION:3.0",
+        f"UID:{uid}",
+        f"FN:{full_name}",
+        f"N:{n_parts}",
+        "END:VCARD",
+    ]
+    vcard = "\r\n".join(lines) + "\r\n"
+    config = get_config()
+    await nc_mcp.client.dav_request(
+        "PUT",
+        f"addressbooks/users/{config.user}/{BOOK_ID}/{uid}.vcf",
+        body=vcard,
+        headers={"Content-Type": "text/vcard; charset=utf-8"},
+        context=f"Create test contact '{uid}'",
+    )
+    return uid
+
+
+class TestUpdateStructuredName:
+    @pytest.mark.asyncio
+    async def test_update_given_preserves_family(self, nc_mcp: McpTestHelper) -> None:
+        uid = await _put_vcard_with_name(nc_mcp, "upd-given", given="John", family="Doe")
+        contact = json.loads(await nc_mcp.call("get_contact", uid=uid, book_id=BOOK_ID))
+        updated = json.loads(
+            await nc_mcp.call("update_contact", uid=uid, etag=contact["etag"], given_name="Jane", book_id=BOOK_ID)
+        )
+        assert updated["name"]["given"] == "Jane"
+        assert updated["name"]["family"] == "Doe"
+
+    @pytest.mark.asyncio
+    async def test_update_family_preserves_given(self, nc_mcp: McpTestHelper) -> None:
+        uid = await _put_vcard_with_name(nc_mcp, "upd-family", given="John", family="Doe")
+        contact = json.loads(await nc_mcp.call("get_contact", uid=uid, book_id=BOOK_ID))
+        updated = json.loads(
+            await nc_mcp.call("update_contact", uid=uid, etag=contact["etag"], family_name="Smith", book_id=BOOK_ID)
+        )
+        assert updated["name"]["given"] == "John"
+        assert updated["name"]["family"] == "Smith"
+
+    @pytest.mark.asyncio
+    async def test_update_both_names(self, nc_mcp: McpTestHelper) -> None:
+        uid = await _put_vcard_with_name(nc_mcp, "upd-both", given="John", family="Doe")
+        contact = json.loads(await nc_mcp.call("get_contact", uid=uid, book_id=BOOK_ID))
+        updated = json.loads(
+            await nc_mcp.call(
+                "update_contact",
+                uid=uid,
+                etag=contact["etag"],
+                given_name="Jane",
+                family_name="Smith",
+                book_id=BOOK_ID,
+            )
+        )
+        assert updated["name"]["given"] == "Jane"
+        assert updated["name"]["family"] == "Smith"
+
+    @pytest.mark.asyncio
+    async def test_update_given_auto_updates_fn(self, nc_mcp: McpTestHelper) -> None:
+        uid = await _put_vcard_with_name(nc_mcp, "upd-autofn", given="John", family="Doe")
+        contact = json.loads(await nc_mcp.call("get_contact", uid=uid, book_id=BOOK_ID))
+        updated = json.loads(
+            await nc_mcp.call("update_contact", uid=uid, etag=contact["etag"], given_name="Jane", book_id=BOOK_ID)
+        )
+        assert "Jane" in updated["full_name"]
+        assert "Doe" in updated["full_name"]
+
+    @pytest.mark.asyncio
+    async def test_update_given_on_family_only_contact(self, nc_mcp: McpTestHelper) -> None:
+        uid = await _put_vcard_with_name(nc_mcp, "upd-add-given", family="Doe")
+        contact = json.loads(await nc_mcp.call("get_contact", uid=uid, book_id=BOOK_ID))
+        updated = json.loads(
+            await nc_mcp.call("update_contact", uid=uid, etag=contact["etag"], given_name="Jane", book_id=BOOK_ID)
+        )
+        assert updated["name"]["given"] == "Jane"
+        assert updated["name"]["family"] == "Doe"
+
+    @pytest.mark.asyncio
+    async def test_update_family_on_given_only_contact(self, nc_mcp: McpTestHelper) -> None:
+        uid = await _put_vcard_with_name(nc_mcp, "upd-add-family", given="John")
+        contact = json.loads(await nc_mcp.call("get_contact", uid=uid, book_id=BOOK_ID))
+        updated = json.loads(
+            await nc_mcp.call("update_contact", uid=uid, etag=contact["etag"], family_name="Doe", book_id=BOOK_ID)
+        )
+        assert updated["name"]["given"] == "John"
+        assert updated["name"]["family"] == "Doe"
+
+    @pytest.mark.asyncio
+    async def test_update_full_name_with_given(self, nc_mcp: McpTestHelper) -> None:
+        uid = await _put_vcard_with_name(nc_mcp, "upd-fn-given", given="John", family="Doe")
+        contact = json.loads(await nc_mcp.call("get_contact", uid=uid, book_id=BOOK_ID))
+        updated = json.loads(
+            await nc_mcp.call(
+                "update_contact",
+                uid=uid,
+                etag=contact["etag"],
+                full_name="Dr. Jane Smith",
+                given_name="Jane",
+                family_name="Smith",
+                book_id=BOOK_ID,
+            )
+        )
+        assert updated["full_name"] == "Dr. Jane Smith"
+        assert updated["name"]["given"] == "Jane"
+        assert updated["name"]["family"] == "Smith"
+
+    @pytest.mark.asyncio
+    async def test_update_name_preserves_other_fields(self, nc_mcp: McpTestHelper) -> None:
+        uid = "mcp-name-upd-preserve"
+        full_name = f"{PREFIX}-upd-preserve"
+        lines = [
+            "BEGIN:VCARD",
+            "VERSION:3.0",
+            f"UID:{uid}",
+            f"FN:{full_name}",
+            "N:Doe;John;;;",
+            "EMAIL;TYPE=WORK:john@test.com",
+            "ORG:Test Corp",
+            "CATEGORIES:Work,VIP",
+            "END:VCARD",
+        ]
+        vcard = "\r\n".join(lines) + "\r\n"
+        config = get_config()
+        await nc_mcp.client.dav_request(
+            "PUT",
+            f"addressbooks/users/{config.user}/{BOOK_ID}/{uid}.vcf",
+            body=vcard,
+            headers={"Content-Type": "text/vcard; charset=utf-8"},
+            context=f"Create test contact '{uid}'",
+        )
+        contact = json.loads(await nc_mcp.call("get_contact", uid=uid, book_id=BOOK_ID))
+        updated = json.loads(
+            await nc_mcp.call("update_contact", uid=uid, etag=contact["etag"], given_name="Jane", book_id=BOOK_ID)
+        )
+        assert updated["name"]["given"] == "Jane"
+        assert updated.get("organization") == "Test Corp"
+        assert any(e["value"] == "john@test.com" for e in updated.get("emails", []))
+        assert set(updated.get("categories", [])) == {"Work", "VIP"}
 
 
 class TestDeleteContact:
