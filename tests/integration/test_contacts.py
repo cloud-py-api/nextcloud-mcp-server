@@ -262,6 +262,26 @@ class TestUpdateContact:
             await nc_mcp.call("update_contact", uid=created["uid"], etag="wrong-etag", title="Nope", book_id=BOOK_ID)
 
     @pytest.mark.asyncio
+    async def test_update_clear_note(self, nc_mcp: McpTestHelper) -> None:
+        created = await _create(nc_mcp, "upd-clrnote", note="Will be cleared")
+        contact = json.loads(await nc_mcp.call("get_contact", uid=created["uid"], book_id=BOOK_ID))
+        assert contact.get("note") == "Will be cleared"
+        updated = json.loads(
+            await nc_mcp.call("update_contact", uid=created["uid"], etag=contact["etag"], note="", book_id=BOOK_ID)
+        )
+        assert "note" not in updated
+
+    @pytest.mark.asyncio
+    async def test_update_clear_title_preserves_others(self, nc_mcp: McpTestHelper) -> None:
+        created = await _create(nc_mcp, "upd-clrtitle", title="Old Title", organization="Keep Corp")
+        contact = json.loads(await nc_mcp.call("get_contact", uid=created["uid"], book_id=BOOK_ID))
+        updated = json.loads(
+            await nc_mcp.call("update_contact", uid=created["uid"], etag=contact["etag"], title="", book_id=BOOK_ID)
+        )
+        assert "title" not in updated
+        assert updated.get("organization") == "Keep Corp"
+
+    @pytest.mark.asyncio
     async def test_update_no_fields_raises(self, nc_mcp: McpTestHelper) -> None:
         created = await _create(nc_mcp, "upd-nofields")
         contact = json.loads(await nc_mcp.call("get_contact", uid=created["uid"], book_id=BOOK_ID))

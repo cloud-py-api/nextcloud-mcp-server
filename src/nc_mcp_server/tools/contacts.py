@@ -480,18 +480,19 @@ def _register_write_tools(mcp: FastMCP) -> None:
     async def update_contact(
         uid: str,
         etag: str,
-        full_name: str = "",
-        given_name: str = "",
-        family_name: str = "",
-        email: str = "",
-        phone: str = "",
-        organization: str = "",
-        title: str = "",
-        note: str = "",
+        full_name: str | None = None,
+        given_name: str | None = None,
+        family_name: str | None = None,
+        email: str | None = None,
+        phone: str | None = None,
+        organization: str | None = None,
+        title: str | None = None,
+        note: str | None = None,
         book_id: str = "contacts",
     ) -> str:
         """Update an existing contact. Only provided fields are changed.
 
+        Pass an empty string to clear an optional field (e.g. note="").
         Requires the contact's current etag (from get_contacts or get_contact)
         to prevent conflicting updates.
 
@@ -501,11 +502,11 @@ def _register_write_tools(mcp: FastMCP) -> None:
             full_name: New full display name.
             given_name: New first name.
             family_name: New last name.
-            email: New primary email.
-            phone: New primary phone.
-            organization: New organization.
-            title: New job title.
-            note: New note.
+            email: New primary email. Pass "" to remove.
+            phone: New primary phone. Pass "" to remove.
+            organization: New organization. Pass "" to remove.
+            title: New job title. Pass "" to remove.
+            note: New note. Pass "" to remove.
             book_id: Address book ID (default "contacts").
 
         Returns:
@@ -523,7 +524,7 @@ def _register_write_tools(mcp: FastMCP) -> None:
                 ("title", title),
                 ("note", note),
             ]
-            if val
+            if val is not None
         }
         if not updates:
             raise ValueError("At least one field must be provided for update.")
