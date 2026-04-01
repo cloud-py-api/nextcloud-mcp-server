@@ -123,6 +123,13 @@ class TestCreateContact:
         assert contact.get("note") == "Has all fields"
 
     @pytest.mark.asyncio
+    async def test_create_special_chars_roundtrip(self, nc_mcp: McpTestHelper) -> None:
+        contact = await _create(nc_mcp, "special-R&D", organization="R&D <Team>", title='VP "Sales"')
+        fetched = json.loads(await nc_mcp.call("get_contact", uid=contact["uid"], book_id=BOOK_ID))
+        assert fetched.get("organization") == "R&D <Team>"
+        assert fetched.get("title") == 'VP "Sales"'
+
+    @pytest.mark.asyncio
     async def test_create_no_name_raises(self, nc_mcp: McpTestHelper) -> None:
         with pytest.raises((ToolError, ValueError)):
             await nc_mcp.call("create_contact", email="noname@test.com", book_id=BOOK_ID)

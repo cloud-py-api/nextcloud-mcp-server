@@ -4,7 +4,6 @@ import json
 import uuid
 import xml.etree.ElementTree as ET
 from typing import Any
-from xml.sax.saxutils import escape as xml_escape
 
 from icalendar import Calendar as ICal
 from mcp.server.fastmcp import FastMCP
@@ -41,6 +40,11 @@ CONTACTS_REPORT = (
 )
 
 SKIP_BOOKS = {"z-server-generated--system", "z-app-generated--contactsinteraction--recent"}
+
+
+def _vcard_escape(text: str) -> str:
+    """Escape a string for use as a vCard 3.0 text value (RFC 2426 Section 2.4.2)."""
+    return text.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
 
 
 def _carddav_path(user: str, book_id: str = "", resource: str = "") -> str:
@@ -205,29 +209,29 @@ def _build_vcard(fields: dict[str, Any]) -> str:
     uid = fields.get("uid", f"mcp-{uuid.uuid4()}")
     lines.append(f"UID:{uid}")
     if fields.get("full_name"):
-        lines.append(f"FN:{xml_escape(fields['full_name'])}")
+        lines.append(f"FN:{_vcard_escape(fields['full_name'])}")
     family = fields.get("family_name", "")
     given = fields.get("given_name", "")
     if family or given:
-        lines.append(f"N:{xml_escape(family)};{xml_escape(given)};;;")
+        lines.append(f"N:{_vcard_escape(family)};{_vcard_escape(given)};;;")
         if not fields.get("full_name"):
             fn = f"{given} {family}".strip()
-            lines.append(f"FN:{xml_escape(fn)}")
+            lines.append(f"FN:{_vcard_escape(fn)}")
     elif fields.get("full_name") and ";" not in fields.get("full_name", ""):
         parts = fields["full_name"].split(maxsplit=1)
         given = parts[0] if parts else ""
         family = parts[1] if len(parts) > 1 else ""
-        lines.append(f"N:{xml_escape(family)};{xml_escape(given)};;;")
+        lines.append(f"N:{_vcard_escape(family)};{_vcard_escape(given)};;;")
     if fields.get("email"):
-        lines.append(f"EMAIL;TYPE=WORK:{xml_escape(fields['email'])}")
+        lines.append(f"EMAIL;TYPE=WORK:{_vcard_escape(fields['email'])}")
     if fields.get("phone"):
-        lines.append(f"TEL;TYPE=CELL:{xml_escape(fields['phone'])}")
+        lines.append(f"TEL;TYPE=CELL:{_vcard_escape(fields['phone'])}")
     if fields.get("organization"):
-        lines.append(f"ORG:{xml_escape(fields['organization'])}")
+        lines.append(f"ORG:{_vcard_escape(fields['organization'])}")
     if fields.get("title"):
-        lines.append(f"TITLE:{xml_escape(fields['title'])}")
+        lines.append(f"TITLE:{_vcard_escape(fields['title'])}")
     if fields.get("note"):
-        lines.append(f"NOTE:{xml_escape(fields['note'])}")
+        lines.append(f"NOTE:{_vcard_escape(fields['note'])}")
     lines.append("END:VCARD")
     return "\r\n".join(lines) + "\r\n"
 
@@ -280,18 +284,18 @@ def _apply_contact_updates(vcard_data: str, updates: dict[str, Any]) -> str:
     new_lines = _strip_updated_fields(vcard_data.strip().split("\n"), skip_fields)
     insert_before = len(new_lines) - 1
     if updates.get("full_name"):
-        new_lines.insert(insert_before, f"FN:{xml_escape(updates['full_name'])}")
+        new_lines.insert(insert_before, f"FN:{_vcard_escape(updates['full_name'])}")
     if "given_name" in updates or "family_name" in updates:
         card = ICal.from_ical(vcard_data)
         old_n = card.get("N")
         family = updates.get("family_name", str(old_n.fields.family) if old_n and hasattr(old_n, "fields") else "")
         given = updates.get("given_name", str(old_n.fields.given) if old_n and hasattr(old_n, "fields") else "")
-        new_lines.insert(insert_before, f"N:{xml_escape(family)};{xml_escape(given)};;;")
+        new_lines.insert(insert_before, f"N:{_vcard_escape(family)};{_vcard_escape(given)};;;")
         if not updates.get("full_name"):
-            new_lines.insert(insert_before, f"FN:{xml_escape(f'{given} {family}'.strip())}")
+            new_lines.insert(insert_before, f"FN:{_vcard_escape(f'{given} {family}'.strip())}")
     for key, vcard_field in _SIMPLE_UPDATE_FIELDS:
         if updates.get(key):
-            new_lines.insert(insert_before, f"{vcard_field}:{xml_escape(updates[key])}")
+            new_lines.insert(insert_before, f"{vcard_field}:{_vcard_escape(updates[key])}")
     return "\r\n".join(new_lines) + "\r\n"
 
 
