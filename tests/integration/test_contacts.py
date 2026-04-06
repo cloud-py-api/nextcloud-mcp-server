@@ -22,7 +22,7 @@ PREFIX = "mcp-test-contact"
 
 async def _delete_mcp_contacts(client: NextcloudClient, user: str) -> None:
     """Delete all mcp-* contacts via direct DAV calls (bypasses MCP permission state)."""
-    with contextlib.suppress(Exception):
+    try:
         response = await client.dav_request(
             "REPORT",
             f"addressbooks/users/{user}/{BOOK_ID}/",
@@ -30,16 +30,18 @@ async def _delete_mcp_contacts(client: NextcloudClient, user: str) -> None:
             headers={"Depth": "1", "Content-Type": "application/xml; charset=utf-8"},
             context="Cleanup test contacts",
         )
-        for href, _etag, vcard_data in _parse_report_xml(response.text or ""):
+    except Exception:  # noqa: BLE001
+        return
+    for href, _etag, vcard_data in _parse_report_xml(response.text or ""):
+        with contextlib.suppress(Exception):
             contact = _format_contact(vcard_data)
             if contact["uid"].startswith("mcp-"):
                 resource = href.split(f"/{BOOK_ID}/", 1)[1] if f"/{BOOK_ID}/" in href else f"{contact['uid']}.vcf"
-                with contextlib.suppress(Exception):
-                    await client.dav_request(
-                        "DELETE",
-                        f"addressbooks/users/{user}/{BOOK_ID}/{resource}",
-                        context=f"Cleanup '{contact['uid']}'",
-                    )
+                await client.dav_request(
+                    "DELETE",
+                    f"addressbooks/users/{user}/{BOOK_ID}/{resource}",
+                    context=f"Cleanup '{contact['uid']}'",
+                )
 
 
 @pytest.fixture(autouse=True)
@@ -50,8 +52,10 @@ async def _cleanup_test_contacts(_cleanup_config: Config) -> None:
     permission state that permission-specific fixtures (nc_mcp_read_only, etc.) rely on.
     """
     client = NextcloudClient(_cleanup_config)
-    await _delete_mcp_contacts(client, _cleanup_config.user)
-    await client.close()
+    try:
+        await _delete_mcp_contacts(client, _cleanup_config.user)
+    finally:
+        await client.close()
 
 
 async def _create(nc_mcp: McpTestHelper, suffix: str, **extra: str) -> dict[str, Any]:
@@ -834,7 +838,7 @@ class TestContactPermissions:
             await nc_mcp_read_only.call("delete_contact", uid="any", book_id=BOOK_ID)
 
     @pytest.mark.asyncio
-    async def test_write_allows_create(self, nc_mcp: McpTestHelper, nc_mcp_write: McpTestHelper) -> None:
+    async def test_write_allows_create(self, nc_mcp_write: McpTestHelper) -> None:
         result = await nc_mcp_write.call("create_contact", full_name=f"{PREFIX}-write-ok", book_id=BOOK_ID)
         contact = json.loads(result)
         assert contact["uid"]
