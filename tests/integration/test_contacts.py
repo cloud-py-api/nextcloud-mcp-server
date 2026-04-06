@@ -156,6 +156,18 @@ class TestCreateContact:
         assert fetched.get("title") == 'VP "Sales"'
 
     @pytest.mark.asyncio
+    async def test_create_note_with_crlf(self, nc_mcp: McpTestHelper) -> None:
+        """Notes with Windows line endings must roundtrip without bare \\r corruption."""
+        contact = await _create(nc_mcp, "crlf-note", note="Line1\r\nLine2\rLine3\nLine4")
+        fetched = json.loads(await nc_mcp.call("get_contact", uid=contact["uid"], book_id=BOOK_ID))
+        note = fetched.get("note", "")
+        assert "Line1" in note
+        assert "Line2" in note
+        assert "Line3" in note
+        assert "Line4" in note
+        assert "\r" not in note
+
+    @pytest.mark.asyncio
     async def test_create_no_name_raises(self, nc_mcp: McpTestHelper) -> None:
         with pytest.raises((ToolError, ValueError)):
             await nc_mcp.call("create_contact", email="noname@test.com", book_id=BOOK_ID)
@@ -351,6 +363,30 @@ class TestUpdateContact:
         )
         assert updated.get("note") == "Short note"
         assert updated.get("organization") == "Keep Corp"
+
+    @pytest.mark.asyncio
+    async def test_update_clear_full_name_keeps_fn_from_n(self, nc_mcp: McpTestHelper) -> None:
+        """Clearing full_name must not produce a vCard without FN — synthesize from N."""
+        uid = await _put_vcard_with_name(nc_mcp, "clr-fn", given="John", family="Doe")
+        contact = json.loads(await nc_mcp.call("get_contact", uid=uid, book_id=BOOK_ID))
+        updated = json.loads(
+            await nc_mcp.call("update_contact", uid=uid, etag=contact["etag"], full_name="", book_id=BOOK_ID)
+        )
+        assert updated["full_name"], "FN must not be empty after clearing full_name"
+        assert "John" in updated["full_name"]
+        assert "Doe" in updated["full_name"]
+
+    @pytest.mark.asyncio
+    async def test_update_clear_full_name_without_n(self, nc_mcp: McpTestHelper) -> None:
+        """Clearing full_name on a contact with only FN (no structured N) keeps old FN."""
+        created = await _create(nc_mcp, "clr-fn-only")
+        contact = json.loads(await nc_mcp.call("get_contact", uid=created["uid"], book_id=BOOK_ID))
+        original_fn = contact["full_name"]
+        updated = json.loads(
+            await nc_mcp.call("update_contact", uid=created["uid"], etag=contact["etag"], full_name="", book_id=BOOK_ID)
+        )
+        assert updated["full_name"], "FN must not be empty"
+        assert PREFIX in updated["full_name"] or updated["full_name"] == original_fn
 
 
 async def _put_vcard_with_categories(nc_mcp: McpTestHelper, suffix: str, categories: list[str]) -> str:

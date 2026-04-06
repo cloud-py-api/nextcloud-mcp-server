@@ -44,7 +44,8 @@ SKIP_BOOKS = {"z-server-generated--system", "z-app-generated--contactsinteractio
 
 def _vcard_escape(text: str) -> str:
     """Escape a string for use as a vCard 3.0 text value (RFC 2426 Section 2.4.2)."""
-    return text.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    return normalized.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
 
 
 def _normalize_entries(entries: list[dict[str, str]], default_type: str) -> list[dict[str, str]]:
@@ -320,6 +321,39 @@ def _strip_updated_fields(lines: list[str], skip_fields: set[str]) -> list[str]:
     return result
 
 
+def _synthesize_fn(card: Any) -> str:
+    """Derive a display name from a parsed vCard's existing N or FN fields."""
+    old_n = card.get("N")
+    if old_n and hasattr(old_n, "fields"):
+        fn = f"{old_n.fields.given} {old_n.fields.family}".strip()
+        if fn:
+            return fn
+    return str(card.get("FN", ""))
+
+
+def _apply_name_updates(new_lines: list[str], insert_before: int, card: Any, updates: dict[str, Any]) -> bool:
+    """Insert updated N and FN lines. Returns True if FN was inserted."""
+    fn_inserted = False
+    if updates.get("full_name"):
+        new_lines.insert(insert_before, f"FN:{_vcard_escape(updates['full_name'])}")
+        fn_inserted = True
+    if "given_name" not in updates and "family_name" not in updates:
+        return fn_inserted
+    old_n = card.get("N")
+    has_fields = old_n and hasattr(old_n, "fields")
+    family = updates.get("family_name", str(old_n.fields.family) if has_fields else "")
+    given = updates.get("given_name", str(old_n.fields.given) if has_fields else "")
+    additional = str(old_n.fields.additional) if has_fields and old_n.fields.additional else ""
+    prefix = str(old_n.fields.prefix) if has_fields and old_n.fields.prefix else ""
+    suffix = str(old_n.fields.suffix) if has_fields and old_n.fields.suffix else ""
+    n_parts = ";".join(_vcard_escape(p) for p in [family, given, additional, prefix, suffix])
+    new_lines.insert(insert_before, f"N:{n_parts}")
+    if not fn_inserted:
+        new_lines.insert(insert_before, f"FN:{_vcard_escape(f'{given} {family}'.strip())}")
+        fn_inserted = True
+    return fn_inserted
+
+
 def _apply_contact_updates(vcard_data: str, updates: dict[str, Any]) -> str:
     """Apply partial field updates to existing vCard data, return new vCard string."""
     skip_fields = {field for key, field in _UPDATE_FIELD_MAP if key in updates}
@@ -327,21 +361,10 @@ def _apply_contact_updates(vcard_data: str, updates: dict[str, Any]) -> str:
         skip_fields.add("FN")
     new_lines = _strip_updated_fields(_unfold_vcard_lines(vcard_data), skip_fields)
     insert_before = len(new_lines) - 1
-    if updates.get("full_name"):
-        new_lines.insert(insert_before, f"FN:{_vcard_escape(updates['full_name'])}")
-    if "given_name" in updates or "family_name" in updates:
-        card = ICal.from_ical(vcard_data)
-        old_n = card.get("N")
-        has_fields = old_n and hasattr(old_n, "fields")
-        family = updates.get("family_name", str(old_n.fields.family) if has_fields else "")
-        given = updates.get("given_name", str(old_n.fields.given) if has_fields else "")
-        additional = str(old_n.fields.additional) if has_fields and old_n.fields.additional else ""
-        prefix = str(old_n.fields.prefix) if has_fields and old_n.fields.prefix else ""
-        suffix = str(old_n.fields.suffix) if has_fields and old_n.fields.suffix else ""
-        n_parts = ";".join(_vcard_escape(p) for p in [family, given, additional, prefix, suffix])
-        new_lines.insert(insert_before, f"N:{n_parts}")
-        if not updates.get("full_name"):
-            new_lines.insert(insert_before, f"FN:{_vcard_escape(f'{given} {family}'.strip())}")
+    card = ICal.from_ical(vcard_data)
+    fn_inserted = _apply_name_updates(new_lines, insert_before, card, updates)
+    if "FN" in skip_fields and not fn_inserted:
+        new_lines.insert(insert_before, f"FN:{_vcard_escape(_synthesize_fn(card))}")
     for key, vcard_field in _SIMPLE_UPDATE_FIELDS:
         if updates.get(key):
             new_lines.insert(insert_before, f"{vcard_field}:{_vcard_escape(updates[key])}")
