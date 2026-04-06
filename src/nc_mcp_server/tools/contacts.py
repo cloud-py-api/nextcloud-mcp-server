@@ -265,14 +265,28 @@ _SIMPLE_UPDATE_FIELDS = [
 ]
 
 
+def _unfold_vcard_lines(vcard_data: str) -> list[str]:
+    """Unfold vCard continuation lines (RFC 2426 §2.6 / RFC 6350 §3.2).
+
+    Lines starting with a space or tab are continuations of the previous logical line.
+    """
+    lines: list[str] = []
+    for raw_line in vcard_data.splitlines():
+        clean = raw_line.rstrip("\r")
+        if clean[:1] in (" ", "\t") and lines:
+            lines[-1] += clean[1:]
+        else:
+            lines.append(clean)
+    return lines
+
+
 def _strip_updated_fields(lines: list[str], skip_fields: set[str]) -> list[str]:
     """Remove lines whose vCard field name is in skip_fields."""
     result: list[str] = []
-    for raw_line in lines:
-        clean = raw_line.rstrip("\r")
-        field_name = clean.split(";")[0].split(":")[0].upper() if ":" in clean else ""
+    for line in lines:
+        field_name = line.split(";")[0].split(":")[0].upper() if ":" in line else ""
         if field_name not in skip_fields:
-            result.append(clean)
+            result.append(line)
     return result
 
 
@@ -281,7 +295,7 @@ def _apply_contact_updates(vcard_data: str, updates: dict[str, Any]) -> str:
     skip_fields = {field for key, field in _UPDATE_FIELD_MAP if key in updates}
     if ("given_name" in updates or "family_name" in updates) and "full_name" not in updates:
         skip_fields.add("FN")
-    new_lines = _strip_updated_fields(vcard_data.strip().split("\n"), skip_fields)
+    new_lines = _strip_updated_fields(_unfold_vcard_lines(vcard_data), skip_fields)
     insert_before = len(new_lines) - 1
     if updates.get("full_name"):
         new_lines.insert(insert_before, f"FN:{_vcard_escape(updates['full_name'])}")

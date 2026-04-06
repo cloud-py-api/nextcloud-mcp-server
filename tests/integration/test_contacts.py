@@ -7,7 +7,10 @@ from typing import Any
 import pytest
 from mcp.server.fastmcp.exceptions import ToolError
 
+from nc_mcp_server.client import NextcloudClient
+from nc_mcp_server.config import Config
 from nc_mcp_server.state import get_config
+from nc_mcp_server.tools.contacts import CONTACTS_REPORT, _format_contact, _parse_report_xml
 
 from .conftest import McpTestHelper
 
@@ -17,15 +20,38 @@ BOOK_ID = "contacts"
 PREFIX = "mcp-test-contact"
 
 
+async def _delete_mcp_contacts(client: NextcloudClient, user: str) -> None:
+    """Delete all mcp-* contacts via direct DAV calls (bypasses MCP permission state)."""
+    with contextlib.suppress(Exception):
+        response = await client.dav_request(
+            "REPORT",
+            f"addressbooks/users/{user}/{BOOK_ID}/",
+            body=CONTACTS_REPORT,
+            headers={"Depth": "1", "Content-Type": "application/xml; charset=utf-8"},
+            context="Cleanup test contacts",
+        )
+        for href, _etag, vcard_data in _parse_report_xml(response.text or ""):
+            contact = _format_contact(vcard_data)
+            if contact["uid"].startswith("mcp-"):
+                resource = href.split(f"/{BOOK_ID}/", 1)[1] if f"/{BOOK_ID}/" in href else f"{contact['uid']}.vcf"
+                with contextlib.suppress(Exception):
+                    await client.dav_request(
+                        "DELETE",
+                        f"addressbooks/users/{user}/{BOOK_ID}/{resource}",
+                        context=f"Cleanup '{contact['uid']}'",
+                    )
+
+
 @pytest.fixture(autouse=True)
-async def _cleanup_test_contacts(nc_mcp: McpTestHelper) -> None:
-    """Delete any leftover test contacts before each test."""
-    result = await nc_mcp.call("get_contacts", book_id=BOOK_ID, limit=200)
-    for contact in json.loads(result)["data"]:
-        uid = contact["uid"]
-        if uid.startswith("mcp-") and PREFIX in contact.get("full_name", ""):
-            with contextlib.suppress(ToolError):
-                await nc_mcp.call("delete_contact", uid=uid, book_id=BOOK_ID)
+async def _cleanup_test_contacts(_cleanup_config: Config) -> None:
+    """Delete any leftover test contacts before each test.
+
+    Uses a standalone DAV client instead of nc_mcp to avoid mutating the global
+    permission state that permission-specific fixtures (nc_mcp_read_only, etc.) rely on.
+    """
+    client = NextcloudClient(_cleanup_config)
+    await _delete_mcp_contacts(client, _cleanup_config.user)
+    await client.close()
 
 
 async def _create(nc_mcp: McpTestHelper, suffix: str, **extra: str) -> dict[str, Any]:
@@ -292,6 +318,39 @@ class TestUpdateContact:
     async def test_update_nonexistent_uid_raises(self, nc_mcp: McpTestHelper) -> None:
         with pytest.raises((ToolError, ValueError)):
             await nc_mcp.call("update_contact", uid="nonexistent-uid-xyz", etag="fake", title="Nope", book_id=BOOK_ID)
+
+    @pytest.mark.asyncio
+    async def test_update_folded_note(self, nc_mcp: McpTestHelper) -> None:
+        """Updating a contact whose NOTE was folded by the server must not corrupt other fields."""
+        uid = "mcp-fold-note"
+        long_note = "A" * 100
+        full_name = f"{PREFIX}-fold-note"
+        lines = [
+            "BEGIN:VCARD",
+            "VERSION:3.0",
+            f"UID:{uid}",
+            f"FN:{full_name}",
+            f"N:;{full_name};;;",
+            f"NOTE:{long_note}",
+            "ORG:Keep Corp",
+            "END:VCARD",
+        ]
+        vcard = "\r\n".join(lines) + "\r\n"
+        config = get_config()
+        await nc_mcp.client.dav_request(
+            "PUT",
+            f"addressbooks/users/{config.user}/{BOOK_ID}/{uid}.vcf",
+            body=vcard,
+            headers={"Content-Type": "text/vcard; charset=utf-8"},
+            context=f"Create test contact '{uid}'",
+        )
+        contact = json.loads(await nc_mcp.call("get_contact", uid=uid, book_id=BOOK_ID))
+        assert contact.get("organization") == "Keep Corp"
+        updated = json.loads(
+            await nc_mcp.call("update_contact", uid=uid, etag=contact["etag"], note="Short note", book_id=BOOK_ID)
+        )
+        assert updated.get("note") == "Short note"
+        assert updated.get("organization") == "Keep Corp"
 
 
 async def _put_vcard_with_categories(nc_mcp: McpTestHelper, suffix: str, categories: list[str]) -> str:
