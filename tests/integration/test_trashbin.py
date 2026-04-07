@@ -189,6 +189,51 @@ class TestRestoreTrashItem:
         await nc_mcp.client.dav_delete(filename)
 
 
+class TestDeleteTrashItem:
+    @pytest.mark.asyncio
+    async def test_delete_single_item(self, nc_mcp: McpTestHelper) -> None:
+        await nc_mcp.call("empty_trash")
+        await _trash_file(nc_mcp, "del-single")
+        item = await _find_in_trash(nc_mcp, "del-single")
+        assert item is not None
+        result = await nc_mcp.call("delete_trash_item", trash_path=item["trash_path"])
+        assert "Permanently deleted" in result
+        after = await _find_in_trash(nc_mcp, "del-single")
+        assert after is None
+
+    @pytest.mark.asyncio
+    async def test_delete_item_leaves_others(self, nc_mcp: McpTestHelper) -> None:
+        await nc_mcp.call("empty_trash")
+        await _trash_file(nc_mcp, "del-keep")
+        await _trash_file(nc_mcp, "del-remove")
+        item = await _find_in_trash(nc_mcp, "del-remove")
+        assert item is not None
+        await nc_mcp.call("delete_trash_item", trash_path=item["trash_path"])
+        remaining = json.loads(await nc_mcp.call("list_trash", limit=200))["data"]
+        names = [i.get("original_name", "") for i in remaining]
+        assert f"{TRASH_PREFIX}-del-keep.txt" in names
+        assert f"{TRASH_PREFIX}-del-remove.txt" not in names
+
+    @pytest.mark.asyncio
+    async def test_delete_nonexistent_raises(self, nc_mcp: McpTestHelper) -> None:
+        with pytest.raises(ToolError):
+            await nc_mcp.call("delete_trash_item", trash_path="nonexistent.d9999999999")
+
+    @pytest.mark.asyncio
+    async def test_delete_directory_from_trash(self, nc_mcp: McpTestHelper) -> None:
+        await nc_mcp.call("empty_trash")
+        dir_name = f"{TRASH_PREFIX}-del-dir"
+        await nc_mcp.client.dav_mkcol(dir_name)
+        await nc_mcp.client.dav_put(f"{dir_name}/child.txt", b"inside", content_type="text/plain")
+        await nc_mcp.client.dav_delete(dir_name)
+        item = await _find_in_trash(nc_mcp, "del-dir")
+        assert item is not None
+        assert item["is_directory"] is True
+        await nc_mcp.call("delete_trash_item", trash_path=item["trash_path"])
+        after = await _find_in_trash(nc_mcp, "del-dir")
+        assert after is None
+
+
 class TestEmptyTrash:
     @pytest.mark.asyncio
     async def test_empty_trash_clears_all(self, nc_mcp: McpTestHelper) -> None:
@@ -229,6 +274,16 @@ class TestTrashbinPermissions:
     async def test_read_only_blocks_empty(self, nc_mcp_read_only: McpTestHelper) -> None:
         with pytest.raises(ToolError, match=r"requires 'destructive' permission"):
             await nc_mcp_read_only.call("empty_trash")
+
+    @pytest.mark.asyncio
+    async def test_read_only_blocks_delete_item(self, nc_mcp_read_only: McpTestHelper) -> None:
+        with pytest.raises(ToolError, match=r"requires 'destructive' permission"):
+            await nc_mcp_read_only.call("delete_trash_item", trash_path="x.d1")
+
+    @pytest.mark.asyncio
+    async def test_write_blocks_delete_item(self, nc_mcp_write: McpTestHelper) -> None:
+        with pytest.raises(ToolError, match=r"requires 'destructive' permission"):
+            await nc_mcp_write.call("delete_trash_item", trash_path="x.d1")
 
     @pytest.mark.asyncio
     async def test_write_allows_restore_but_blocks_empty(self, nc_mcp_write: McpTestHelper) -> None:
