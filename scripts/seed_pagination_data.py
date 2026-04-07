@@ -125,6 +125,53 @@ def seed_collective_pages(s: niquests.Session, url: str) -> None:
     print(f"  {created} pages in collective '{coll_name}' (skipped {COUNT - created})")
 
 
+_GIVEN_NAMES = ["Alice", "Bob", "Charlie", "Diana", "Eve", "Frank", "Grace", "Hank", "Iris", "Jack"]
+_FAMILY_NAMES = ["Smith", "Jones", "Brown", "Davis", "Wilson", "Taylor", "Clark", "Lewis", "Hall", "Young"]
+
+
+def seed_contacts(s: niquests.Session, url: str, user: str) -> None:
+    """Create contacts with categories and varied name structures via CardDAV PUT."""
+    dav = f"{url}/remote.php/dav/addressbooks/users/{user}/contacts"
+    for i in range(1, COUNT + 1):
+        uid = f"{PREFIX}-contact-{i:03d}"
+        given = _GIVEN_NAMES[(i - 1) % len(_GIVEN_NAMES)]
+        family = _FAMILY_NAMES[(i - 1) % len(_FAMILY_NAMES)]
+        cats: list[str] = []
+        if i % 2 == 0:
+            cats.append("Work")
+        if i % 3 == 0:
+            cats.append("Family")
+        if i % 5 == 0:
+            cats.append("VIP")
+        if not cats:
+            cats.append("Friend")
+        lines = ["BEGIN:VCARD", "VERSION:3.0", f"UID:{uid}"]
+        remainder = i % 4
+        if remainder == 1:
+            lines.append(f"FN:{given} {family}")
+            lines.append(f"N:{family};{given};;;")
+        elif remainder == 2:
+            lines.append(f"FN:{given}")
+            lines.append(f"N:;{given};;;")
+        elif remainder == 3:
+            lines.append(f"FN:{family}")
+            lines.append(f"N:{family};;;;")
+        else:
+            lines.append(f"FN:{given} {family}")
+            lines.append(f"N:{family};{given};;;")
+        lines.extend(
+            [
+                f"EMAIL;TYPE=WORK:pagtest{i:03d}@example.com",
+                f"ORG:PagTest Corp {i:03d}",
+                f"CATEGORIES:{','.join(cats)}",
+                "END:VCARD",
+            ]
+        )
+        vcard = "\r\n".join(lines) + "\r\n"
+        s.put(f"{dav}/{uid}.vcf", data=vcard, headers={"Content-Type": "text/vcard; charset=utf-8"})
+    print(f"  {COUNT} contacts with categories and varied name structures")
+
+
 def seed_comments(s: niquests.Session, url: str, user: str) -> None:
     """Create a dedicated file and add many comments to it."""
     dav = f"{url}/remote.php/dav/files/{user}"
@@ -187,6 +234,9 @@ def main() -> None:
 
     print("Collective pages...")
     seed_collective_pages(s, url)
+
+    print("Contacts...")
+    seed_contacts(s, url, user)
 
     print("Comments...")
     seed_comments(s, url, user)
