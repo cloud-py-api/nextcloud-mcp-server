@@ -137,6 +137,26 @@ def _register_write_tools(mcp: FastMCP) -> None:
 def _register_destructive_tools(mcp: FastMCP) -> None:
     @mcp.tool(annotations=DESTRUCTIVE)
     @require_permission(PermissionLevel.DESTRUCTIVE)
+    async def delete_trash_item(trash_path: str) -> str:
+        """Permanently delete a single item from the trash bin.
+
+        This action is irreversible. The file or folder will be permanently
+        destroyed and cannot be recovered.
+
+        Args:
+            trash_path: The trash path identifier from list_trash
+                        (e.g. "document.txt.d1711000000").
+
+        Returns:
+            Confirmation message.
+        """
+        client = get_client()
+        await client.trashbin_delete(trash_path)
+        name = trash_path.rsplit(".d", 1)[0] if ".d" in trash_path else trash_path
+        return f"Permanently deleted '{name}' from trash."
+
+    @mcp.tool(annotations=DESTRUCTIVE)
+    @require_permission(PermissionLevel.DESTRUCTIVE)
     async def empty_trash() -> str:
         """Permanently delete ALL items in the trash bin.
 

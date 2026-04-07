@@ -35,6 +35,7 @@ EXPECTED_TOOLS = [
     "delete_message",
     "delete_share",
     "delete_tag",
+    "delete_trash_item",
     "delete_user",
     "disable_app",
     "dismiss_all_notifications",
