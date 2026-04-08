@@ -507,11 +507,15 @@ def _register_update_task(mcp: FastMCP) -> None:
         priority: int | None = None,
         percent_complete: int | None = None,
         categories: str | None = None,
+        etag: str = "",
     ) -> str:
         """Update an existing task. Only provided fields are changed.
 
-        Uses the task's ETag for safe concurrent updates — if the task was
-        modified since it was last read, the update will fail with a conflict error.
+        For optimistic locking, pass the etag from a previous get_task or
+        get_tasks call. If the task was modified since that read, the update
+        will fail with a 412 Precondition Failed error. If omitted, the
+        current etag is fetched automatically (still safe against concurrent
+        writes during this call, but won't detect earlier external changes).
 
         Args:
             list_id: Task list identifier (e.g. "tasks").
@@ -524,6 +528,7 @@ def _register_update_task(mcp: FastMCP) -> None:
             priority: New priority 0-9 (0=undefined, 1=highest, 9=lowest).
             percent_complete: New completion percentage 0-100.
             categories: New categories as comma-separated string. Pass "" to clear.
+            etag: Optional ETag from a previous read for optimistic locking.
 
         Returns:
             Confirmation message with the updated task UID.
@@ -537,7 +542,8 @@ def _register_update_task(mcp: FastMCP) -> None:
         if categories is not None:
             cat_list = [c.strip() for c in categories.split(",") if c.strip()] if categories else []
 
-        href, etag, ical_data = await _find_task(list_id, task_uid)
+        href, fetched_etag, ical_data = await _find_task(list_id, task_uid)
+        match_etag = etag or fetched_etag
         cal = ICal.from_ical(ical_data)
         for component in cal.walk():
             if component.name == "VTODO":
@@ -559,7 +565,7 @@ def _register_update_task(mcp: FastMCP) -> None:
             "PUT",
             _href_to_dav_path(href),
             body=cal.to_ical().decode(),
-            headers={"Content-Type": "text/calendar; charset=utf-8", "If-Match": f'"{etag}"'},
+            headers={"Content-Type": "text/calendar; charset=utf-8", "If-Match": f'"{match_etag}"'},
             context=f"Update task '{task_uid}'",
         )
         return f"Task '{task_uid}' updated."
@@ -568,20 +574,24 @@ def _register_update_task(mcp: FastMCP) -> None:
 def _register_complete_task(mcp: FastMCP) -> None:
     @mcp.tool(annotations=ADDITIVE_IDEMPOTENT)
     @require_permission(PermissionLevel.WRITE)
-    async def complete_task(list_id: str, task_uid: str) -> str:
+    async def complete_task(list_id: str, task_uid: str, etag: str = "") -> str:
         """Mark a task as completed.
 
         Sets the task's status to COMPLETED, percent-complete to 100,
-        and records the completion timestamp. Uses ETag for safe updates.
+        and records the completion timestamp. No-ops if already completed.
+
+        For optimistic locking, pass the etag from a previous get_task call.
 
         Args:
             list_id: Task list identifier (e.g. "tasks").
             task_uid: The task's UID to complete. Use get_tasks to find UIDs.
+            etag: Optional ETag from a previous read for optimistic locking.
 
         Returns:
             Confirmation message.
         """
-        href, etag, ical_data = await _find_task(list_id, task_uid)
+        href, fetched_etag, ical_data = await _find_task(list_id, task_uid)
+        match_etag = etag or fetched_etag
         cal = ICal.from_ical(ical_data)
         needs_update = False
         for component in cal.walk():
@@ -602,7 +612,7 @@ def _register_complete_task(mcp: FastMCP) -> None:
                 "PUT",
                 _href_to_dav_path(href),
                 body=cal.to_ical().decode(),
-                headers={"Content-Type": "text/calendar; charset=utf-8", "If-Match": f'"{etag}"'},
+                headers={"Content-Type": "text/calendar; charset=utf-8", "If-Match": f'"{match_etag}"'},
                 context=f"Complete task '{task_uid}'",
             )
         return f"Task '{task_uid}' completed."

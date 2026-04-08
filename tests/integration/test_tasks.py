@@ -564,6 +564,50 @@ class TestTaskEdgeCases:
         await nc_mcp.call("delete_task", list_id=LIST_ID, task_uid=created["uid"])
 
     @pytest.mark.asyncio
+    async def test_update_with_valid_etag(self, nc_mcp: McpTestHelper) -> None:
+        created = json.loads(await nc_mcp.call("create_task", list_id=LIST_ID, summary="mcp-test-etag-valid"))
+        task = json.loads(await nc_mcp.call("get_task", list_id=LIST_ID, task_uid=created["uid"]))
+        await nc_mcp.call(
+            "update_task",
+            list_id=LIST_ID,
+            task_uid=created["uid"],
+            summary="mcp-test-etag-updated",
+            etag=task["etag"],
+        )
+        updated = json.loads(await nc_mcp.call("get_task", list_id=LIST_ID, task_uid=created["uid"]))
+        assert updated["summary"] == "mcp-test-etag-updated"
+
+        await nc_mcp.call("delete_task", list_id=LIST_ID, task_uid=created["uid"])
+
+    @pytest.mark.asyncio
+    async def test_update_with_stale_etag_raises(self, nc_mcp: McpTestHelper) -> None:
+        created = json.loads(await nc_mcp.call("create_task", list_id=LIST_ID, summary="mcp-test-etag-stale"))
+        task = json.loads(await nc_mcp.call("get_task", list_id=LIST_ID, task_uid=created["uid"]))
+        stale_etag = task["etag"]
+        await nc_mcp.call("update_task", list_id=LIST_ID, task_uid=created["uid"], summary="mcp-test-etag-changed")
+        with pytest.raises(ToolError, match="412"):
+            await nc_mcp.call(
+                "update_task",
+                list_id=LIST_ID,
+                task_uid=created["uid"],
+                summary="mcp-test-etag-conflict",
+                etag=stale_etag,
+            )
+
+        await nc_mcp.call("delete_task", list_id=LIST_ID, task_uid=created["uid"])
+
+    @pytest.mark.asyncio
+    async def test_complete_with_stale_etag_raises(self, nc_mcp: McpTestHelper) -> None:
+        created = json.loads(await nc_mcp.call("create_task", list_id=LIST_ID, summary="mcp-test-complete-etag"))
+        task = json.loads(await nc_mcp.call("get_task", list_id=LIST_ID, task_uid=created["uid"]))
+        stale_etag = task["etag"]
+        await nc_mcp.call("update_task", list_id=LIST_ID, task_uid=created["uid"], summary="mcp-test-etag-changed")
+        with pytest.raises(ToolError, match="412"):
+            await nc_mcp.call("complete_task", list_id=LIST_ID, task_uid=created["uid"], etag=stale_etag)
+
+        await nc_mcp.call("delete_task", list_id=LIST_ID, task_uid=created["uid"])
+
+    @pytest.mark.asyncio
     async def test_full_lifecycle(self, nc_mcp: McpTestHelper) -> None:
         created = json.loads(
             await nc_mcp.call(
