@@ -102,6 +102,8 @@ def register(mcp: FastMCP) -> None:
 
         if filters:
             extra = json.loads(filters)
+            for key in ("term", "limit", "cursor"):
+                extra.pop(key, None)
             params.update(extra)
 
         client = get_client()
