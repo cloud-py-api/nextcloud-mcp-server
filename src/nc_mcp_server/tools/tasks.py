@@ -128,7 +128,7 @@ def _build_task_query_xml(uid: str | None = None) -> str:
     if uid:
         escaped = xml_escape(uid)
         parts.append('<cal:prop-filter name="UID">')
-        parts.append(f"<cal:text-match>{escaped}</cal:text-match>")
+        parts.append(f'<cal:text-match match-type="equals">{escaped}</cal:text-match>')
         parts.append("</cal:prop-filter>")
     parts.append("</cal:comp-filter></cal:comp-filter></cal:filter>")
     parts.append("</cal:calendar-query>")

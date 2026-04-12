@@ -68,7 +68,7 @@ def _build_event_query_xml(
     if uid:
         escaped = xml_escape(uid)
         parts.append('<cal:prop-filter name="UID">')
-        parts.append(f"<cal:text-match>{escaped}</cal:text-match>")
+        parts.append(f'<cal:text-match match-type="equals">{escaped}</cal:text-match>')
         parts.append("</cal:prop-filter>")
     if start and end:
         parts.append(f'<cal:time-range start="{xml_escape(start)}" end="{xml_escape(end)}"/>')
