@@ -3,7 +3,7 @@
 import json
 import uuid
 import xml.etree.ElementTree as ET
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 from xml.sax.saxutils import escape as xml_escape
 
@@ -172,6 +172,8 @@ def _dt_to_str(dt: Any) -> str | None:
         if val.tzinfo is None:
             val = val.replace(tzinfo=UTC)
         return val.isoformat()
+    if isinstance(val, date):
+        return val.isoformat()
     return str(val)
 
 
@@ -210,8 +212,10 @@ def _validate_status(status: str) -> str:
     return upper
 
 
-def _parse_iso_dt(value: str) -> datetime:
-    """Parse an ISO datetime string, ensuring UTC timezone."""
+def _parse_iso_dt(value: str) -> date | datetime:
+    """Parse an ISO date or datetime string."""
+    if len(value) == 10:
+        return date.fromisoformat(value)
     dt = datetime.fromisoformat(value)
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=UTC)
