@@ -59,8 +59,8 @@ def _resolve_local_upload_path(local_path: str, upload_root: str) -> Path:
         resolved = Path(local_path).expanduser().resolve(strict=True)
     except FileNotFoundError:
         raise ValueError(f"Local file not found: {local_path}") from None
-    except (OSError, RuntimeError) as exc:
-        raise ValueError(f"Cannot resolve local path '{local_path}': {exc}") from exc
+    except (OSError, RuntimeError):
+        raise ValueError(f"Cannot resolve local path: {local_path}") from None
     root = Path(upload_root).resolve(strict=False)
     try:
         resolved.relative_to(root)
