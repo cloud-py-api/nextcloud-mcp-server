@@ -3,8 +3,11 @@
 import asyncio
 import base64
 import binascii
+import errno
+import io
 import json
 import mimetypes
+import os
 from collections.abc import AsyncIterator
 from pathlib import Path
 from xml.sax.saxutils import escape as xml_escape
@@ -68,9 +71,28 @@ def _resolve_local_upload_path(local_path: str, upload_root: str) -> Path:
     return resolved
 
 
+def _open_no_follow(path: Path) -> io.FileIO:
+    """Open a regular file for reading with O_NOFOLLOW as TOCTOU defense-in-depth.
+
+    _resolve_local_upload_path already rejects symlinks in the caller's input by
+    resolving the path before the containment check. But if another local actor
+    has write access to the upload root, they could replace the validated file
+    with a symlink between validation and this open. O_NOFOLLOW on the final
+    component closes that race window (intermediate components are not covered;
+    see the tool docstring for the expected trust model).
+    """
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except OSError as exc:
+        if exc.errno in (errno.ELOOP, errno.EMLINK):
+            raise ValueError(f"Refusing to follow symlink at {path.name}: file was swapped after validation.") from exc
+        raise
+    return io.FileIO(fd, closefd=True)
+
+
 async def _stream_local_file(path: Path, chunk_size: int = _UPLOAD_CHUNK_SIZE) -> AsyncIterator[bytes]:
     """Yield chunks from a local file without blocking the event loop."""
-    f = await asyncio.to_thread(path.open, "rb")
+    f = await asyncio.to_thread(_open_no_follow, path)
     try:
         while True:
             chunk = await asyncio.to_thread(f.read, chunk_size)
@@ -339,6 +361,13 @@ def _register_upload_from_path_tool(mcp: FastMCP) -> None:
         to a local directory. Only files inside that directory can be uploaded
         (symlinks are resolved before the containment check). If the env var is
         not set, this tool is not registered at all.
+
+        Trust model: NEXTCLOUD_MCP_UPLOAD_ROOT should be a directory whose ancestors
+        and contents are not writable by less-privileged local users. The final
+        component is opened with O_NOFOLLOW to defeat symlink-swap TOCTOU races,
+        but intermediate directory components are not re-validated — pointing the
+        upload root at a world-writable tree (e.g. inside /tmp) would let other
+        local accounts redirect uploads via directory-level symlink races.
 
         Args:
             local_path: Path to the local file on the MCP server's filesystem.

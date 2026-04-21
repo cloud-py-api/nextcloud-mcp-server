@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from nc_mcp_server.tools.files import _resolve_content_type, _resolve_local_upload_path
+from nc_mcp_server.tools.files import _open_no_follow, _resolve_content_type, _resolve_local_upload_path
 
 
 class TestResolveContentType:
@@ -149,3 +149,36 @@ class TestResolveLocalUploadPath:
         f.write_bytes(b"hi")
         result = _resolve_local_upload_path("~/hi.txt", str(tmp_path))
         assert result == f.resolve()
+
+
+class TestOpenNoFollow:
+    """O_NOFOLLOW guard — defense-in-depth against TOCTOU symlink swap."""
+
+    def test_regular_file_opens(self, tmp_path: Path) -> None:
+        f = tmp_path / "real.bin"
+        payload = b"hello"
+        f.write_bytes(payload)
+        fh = _open_no_follow(f)
+        try:
+            assert fh.read() == payload
+        finally:
+            fh.close()
+
+    def test_symlink_to_file_rejected(self, tmp_path: Path) -> None:
+        target = tmp_path / "target.txt"
+        target.write_bytes(b"secret")
+        link = tmp_path / "link.txt"
+        link.symlink_to(target)
+        with pytest.raises(ValueError, match="swapped after validation"):
+            _open_no_follow(link)
+
+    def test_broken_symlink_rejected(self, tmp_path: Path) -> None:
+        link = tmp_path / "dangling.txt"
+        link.symlink_to(tmp_path / "does-not-exist")
+        with pytest.raises(ValueError, match="swapped after validation"):
+            _open_no_follow(link)
+
+    def test_missing_file_raises_oserror(self, tmp_path: Path) -> None:
+        # Not ELOOP — should propagate as-is, not the swap message
+        with pytest.raises(FileNotFoundError):
+            _open_no_follow(tmp_path / "nope.txt")
