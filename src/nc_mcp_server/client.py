@@ -271,6 +271,22 @@ class NextcloudClient:
         result: dict[str, Any] = response.json()  # type: ignore[assignment]
         return result["ocs"]["data"]
 
+    async def ocs_patch_json(self, path: str, json_data: dict[str, Any] | None = None) -> Any:
+        """Make an OCS PATCH request with a JSON body and return the data portion."""
+        url = f"{self._base_url}/ocs/v2.php/{path}"
+        response = await self._do_request("PATCH", url, json=json_data or {})
+        _raise_for_ocs_status(response, f"OCS PATCH {path}")
+        result: dict[str, Any] = response.json()  # type: ignore[assignment]
+        return result["ocs"]["data"]
+
+    async def ocs_put_json(self, path: str, json_data: dict[str, Any] | None = None) -> Any:
+        """Make an OCS PUT request with a JSON body and return the data portion."""
+        url = f"{self._base_url}/ocs/v2.php/{path}"
+        response = await self._do_request("PUT", url, json=json_data or {})
+        _raise_for_ocs_status(response, f"OCS PUT {path}")
+        result: dict[str, Any] = response.json()  # type: ignore[assignment]
+        return result["ocs"]["data"]
+
     # --- WebDAV ---
 
     async def dav_propfind(self, path: str, depth: int = 1) -> list[dict[str, Any]]:

@@ -40,6 +40,7 @@
 - [x] upload_file_binary tool: base64-encoded binary upload with MIME inference (2026-04-21)
 - [x] upload_file_from_path tool: stream a local file to Nextcloud. Off by default; enabled via NEXTCLOUD_MCP_UPLOAD_ROOT, restricted to files inside that root (symlinks resolved) (2026-04-21)
 - [x] File Reminders tools: get_file_reminder, set_file_reminder, remove_file_reminder (2026-04-22)
+- [x] Forms tools: 25 tools covering forms, questions, options, shares, submissions CRUD + export (2026-04-23)
 
 ### In Progress
 
@@ -47,7 +48,7 @@
 (none)
 
 ### Next Up
-- Tables, Forms, Weather Status (all with full OCS coverage)
+- Weather Status (fully OCS). Tables skipped for now — OCS v2 API is incomplete (rows/columns/views require v1 REST).
 
 ## Phases
 
@@ -94,7 +95,8 @@
 | State | — | 2 |
 | File Helpers | — | 26 |
 | File Reminders | 3 | 20 |
-| **Total** | **102** | **771** |
+| Forms | 25 | 30 |
+| **Total** | **127** | **801** |
 
 Files shows 10, but one (`upload_file_from_path`) is only registered when
-`NEXTCLOUD_MCP_UPLOAD_ROOT` is configured. Default deployments expose 101 tools.
+`NEXTCLOUD_MCP_UPLOAD_ROOT` is configured. Default deployments expose 126 tools.
