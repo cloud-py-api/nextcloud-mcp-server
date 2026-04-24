@@ -15,6 +15,7 @@ from .tools import (
     comments,
     contacts,
     files,
+    forms,
     mail,
     notifications,
     reminders,
@@ -63,6 +64,7 @@ def create_server(config: Config | None = None) -> FastMCP:
     comments.register(mcp)
     contacts.register(mcp)
     files.register(mcp)
+    forms.register(mcp)
     mail.register(mcp)
     notifications.register(mcp)
     reminders.register(mcp)

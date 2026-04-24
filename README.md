@@ -30,9 +30,9 @@ export NEXTCLOUD_PASSWORD=your-app-password
 nc-mcp-server
 ```
 
-## 101 Tools Across 21 Nextcloud Apps
+## 126 Tools Across 22 Nextcloud Apps
 
-A 102nd tool, `upload_file_from_path`, is registered only when the operator sets
+A 127th tool, `upload_file_from_path`, is registered only when the operator sets
 `NEXTCLOUD_MCP_UPLOAD_ROOT`. See [Files](#files) for details.
 
 | Category | Tools | Protocol |
@@ -56,6 +56,7 @@ A 102nd tool, `upload_file_from_path`, is registered only when the operator sets
 | [Tasks](#tasks) | list lists, CRUD tasks, complete | CalDAV |
 | [Mail](#mail) | accounts, mailboxes, messages, send | REST |
 | [Collectives](#collectives) | list, pages, create, trash, restore | REST |
+| [Forms](#forms) | CRUD forms, questions, options, shares, submissions + export | OCS |
 | [Unified Search](#unified-search) | list providers, search across apps | OCS |
 | [App Management](#app-management) | list, info, enable, disable apps | OCS |
 
@@ -362,6 +363,36 @@ call; the body is streamed in chunks rather than loaded into memory.
 | `delete_collective_page` | destructive | Permanently delete a trashed page |
 | `restore_collective` | write | Restore a collective from trash |
 | `restore_collective_page` | write | Restore a page from trash |
+
+### Forms
+
+| Tool | Permission | Description |
+|------|-----------|-------------|
+| `list_forms` | read | List forms (filter by ownership: "owned" or "shared"; omit to merge both) |
+| `get_form` | read | Get a form with questions, options, shares |
+| `list_questions` | read | List questions on a form |
+| `get_question` | read | Get a single question |
+| `list_submissions` | read | List submissions (owner only), with pagination and text filter |
+| `get_submission` | read | Get a single submission with answers |
+| `create_form` | write | Create an empty form or clone from an existing form |
+| `update_form` | write | Update form properties (title, access, state, maxSubmissions, etc.) |
+| `create_question` | write | Add a question (short, long, multiple, dropdown, date, file, grid, …) |
+| `update_question` | write | Update question properties |
+| `reorder_questions` | write | Reorder all questions on a form |
+| `create_options` | write | Add answer options to a choice question |
+| `update_option` | write | Update option text |
+| `reorder_options` | write | Reorder options within a question |
+| `create_form_share` | write | Share a form with user, group, circle, or link |
+| `update_form_share` | write | Update share permissions |
+| `submit_form` | write | Submit answers to a form |
+| `update_submission` | write | Edit an existing submission (requires allowEditSubmissions) |
+| `export_submissions` | write | Export submissions as a spreadsheet to a Nextcloud folder |
+| `delete_form` | destructive | Delete a form and all its content |
+| `delete_question` | destructive | Delete a question |
+| `delete_option` | destructive | Delete an option |
+| `delete_form_share` | destructive | Revoke a share |
+| `delete_submission` | destructive | Delete one submission |
+| `delete_all_submissions` | destructive | Delete every submission on a form |
 
 ### Unified Search
 
