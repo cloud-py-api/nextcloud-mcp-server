@@ -2,7 +2,7 @@
 
 import contextlib
 import json
-from collections.abc import AsyncGenerator, AsyncIterator
+from collections.abc import AsyncGenerator
 from typing import Any
 
 import niquests
@@ -63,7 +63,7 @@ async def circle_peer(nc_config: Config) -> AsyncGenerator[str]:
 
 
 @contextlib.asynccontextmanager
-async def _as_peer(user_id: str, password: str) -> AsyncIterator[None]:
+async def _as_peer(user_id: str, password: str) -> AsyncGenerator[None]:
     """Temporarily swap the global state so tool calls authenticate as the given user.
 
     Restores the prior state on exit. Tools (`create_server`, `get_client`) read the
