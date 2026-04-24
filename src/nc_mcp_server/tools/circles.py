@@ -176,22 +176,36 @@ def _register_circle_writes(mcp: FastMCP) -> None:
     async def update_circle_config(circle_id: str, config: int) -> str:
         """Update a circle's config flags (bitmask). Requires admin or owner level.
 
+        The server auto-adjusts dependent flags — inspect the `config` field of
+        the returned circle to see what was actually stored:
+          - Setting REQUEST (64) without OPEN auto-adds OPEN → stored as 80.
+          - Setting FEDERATED (32768) without ROOT auto-adds ROOT → stored as 40960.
+          - Clearing OPEN while REQUEST is on drops REQUEST too.
+          - Clearing ROOT while FEDERATED is on drops FEDERATED too.
+
         Args:
             circle_id: String circle id.
-            config: Bitmask integer. Common flags (combine with OR):
+            config: Bitmask integer. Valid user-facing flags (combine with OR):
                 8=VISIBLE (listed for non-members),
                 16=OPEN (anyone can join via join_circle),
-                32=INVITE (adding a member creates an invitation to accept),
-                64=REQUEST (join requests need moderator approval),
+                32=INVITE (adding a member generates an invitation to accept),
+                64=REQUEST (join requests need moderator approval; implies OPEN),
                 128=FRIEND (members can invite friends),
-                256=PROTECTED (password-protected),
-                1024=HIDDEN (hidden from listings),
-                4096=LOCAL (not federated),
+                256=PROTECTED (password-protected; password must be set via a
+                    dedicated setting endpoint, not exposed by this tool),
+                4096=LOCAL (not federated, even on GlobalScale),
+                8192=ROOT (circle cannot be nested inside another circle),
+                16384=CIRCLE_INVITE (nested circles confirm before joining),
+                32768=FEDERATED (federated to other instances; implies ROOT),
                 65536=MOUNTPOINT (auto-create Files folder).
                 Pass 0 for a fully private, invite-by-admin-only circle.
+                NOTE: 1 (SINGLE), 2 (PERSONAL), 4 (SYSTEM), 512 (NO_OWNER),
+                1024 (HIDDEN), 2048 (BACKEND), and 131072 (APP) are rejected
+                by the public API (400 "Configuration value is not valid").
 
         Returns:
-            JSON of the updated circle.
+            JSON of the updated circle. Compare `config` in the response to the
+            requested value to detect auto-mutations described above.
         """
         client = get_client()
         data = await client.ocs_put_json(

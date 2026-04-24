@@ -179,6 +179,26 @@ class TestCircleLifecycle:
         assert fetched["config"] == 24
 
     @pytest.mark.asyncio
+    async def test_update_config_rejects_hidden_flag(self, nc_mcp: McpTestHelper) -> None:
+        """1024 (CFG_HIDDEN) is in DEF_CFG_SYSTEM_FILTER — blocked via public OCS API.
+
+        Guards the docstring against regressing to claim HIDDEN is user-settable.
+        """
+        circle = await _make_circle(nc_mcp, "mcp-test-circle-hidden-rej")
+        with pytest.raises((ToolError, NextcloudError)):
+            await nc_mcp.call("update_circle_config", circle_id=circle["id"], config=1024)
+
+    @pytest.mark.asyncio
+    async def test_update_config_auto_adds_open_for_request(self, nc_mcp: McpTestHelper) -> None:
+        """REQUEST (64) implies OPEN (16); server stores 80, not 64.
+
+        Documents the auto-mutation noted in the update_circle_config docstring.
+        """
+        circle = await _make_circle(nc_mcp, "mcp-test-circle-auto-open")
+        updated = json.loads(await nc_mcp.call("update_circle_config", circle_id=circle["id"], config=64))
+        assert updated["config"] == 80, f"expected server to add OPEN to REQUEST, got {updated['config']}"
+
+    @pytest.mark.asyncio
     async def test_delete_removes_circle(self, nc_mcp: McpTestHelper) -> None:
         circle = await _make_circle(nc_mcp, "mcp-test-circle-delete")
         result = json.loads(await nc_mcp.call("delete_circle", circle_id=circle["id"]))
