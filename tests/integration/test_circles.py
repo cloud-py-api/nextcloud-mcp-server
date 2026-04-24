@@ -70,6 +70,12 @@ async def _as_peer(user_id: str, password: str) -> AsyncGenerator[None]:
     client from module-global state, so swapping it lets the existing McpTestHelper
     exercise real tools under a different user's credentials without needing a
     second server instance.
+
+    Concurrency: this mutates a process-wide singleton. Only safe under sequential
+    test execution (pytest-asyncio's default per-test event loop). If this file
+    is ever run under pytest-xdist or similar parallel runners, calls from other
+    tests would race against the swap. Add an asyncio.Lock or a fresh
+    NextcloudClient-per-call path if that ever becomes relevant.
     """
     admin_client = get_client()
     admin_config = get_config()
