@@ -202,7 +202,9 @@ def _register_form_writes(mcp: FastMCP) -> None:
                 expires (unix timestamp, 0 = never), showExpiration (bool),
                 state (0=active, 1=closed, 2=archived), maxSubmissions (int,
                 0 = unlimited), submissionMessage (str), access (object with
-                permitAllUsers/showToAllUsers), fileFormat, filePath.
+                permitAllUsers/showToAllUsers), fileFormat, path (destination
+                folder for the generated submissions spreadsheet — must be sent
+                together with fileFormat to (re)link the form to a file).
 
         Returns:
             JSON of the updated form (refetched after the patch for convenience).

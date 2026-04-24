@@ -51,6 +51,7 @@ class TestFormLifecycle:
     @pytest.mark.asyncio
     async def test_create_produces_form_with_id(self, nc_mcp: McpTestHelper) -> None:
         created = json.loads(await nc_mcp.call("create_form"))
+        await nc_mcp.call("update_form", form_id=created["id"], key_value_pairs={"title": "mcp-test-create-id"})
         assert isinstance(created["id"], int)
         assert created["ownerId"] == "admin"
         assert created["hash"]
@@ -338,11 +339,12 @@ class TestSubmissions:
         await nc_mcp.call("submit_form", form_id=form_id, answers={str(q_id): ["two"]})
         listing = json.loads(await nc_mcp.call("list_submissions", form_id=form_id))
         assert listing["filteredSubmissionsCount"] == 2
-        first_id = listing["submissions"][0]["id"]
-        result = json.loads(await nc_mcp.call("delete_submission", form_id=form_id, submission_id=first_id))
-        assert result == {"deleted_submission_id": first_id}
+        target_id = min(s["id"] for s in listing["submissions"])
+        result = json.loads(await nc_mcp.call("delete_submission", form_id=form_id, submission_id=target_id))
+        assert result == {"deleted_submission_id": target_id}
         after = json.loads(await nc_mcp.call("list_submissions", form_id=form_id))
         assert after["filteredSubmissionsCount"] == 1
+        assert all(s["id"] != target_id for s in after["submissions"])
 
     @pytest.mark.asyncio
     async def test_delete_all_submissions(self, nc_mcp: McpTestHelper) -> None:
