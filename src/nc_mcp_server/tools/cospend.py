@@ -3,6 +3,7 @@
 import json
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import quote as url_quote
 
 from mcp.server.fastmcp import FastMCP
 
@@ -16,6 +17,16 @@ API_BASE = "apps/cospend/api/v1"
 def _body(**kwargs: Any) -> dict[str, Any]:
     """Build a JSON body dict, dropping any None values."""
     return {k: v for k, v in kwargs.items() if v is not None}
+
+
+def _pid(project_id: str) -> str:
+    """URL-encode a project id for use in a path segment.
+
+    Cospend allows project ids with spaces (and other characters) in `id` since
+    the slug is user-supplied and only `/` is rejected. Without encoding, any
+    such id breaks URL parsing on subsequent calls.
+    """
+    return url_quote(project_id, safe="")
 
 
 def _register_project_reads(mcp: FastMCP) -> None:
@@ -53,7 +64,7 @@ def _register_project_reads(mcp: FastMCP) -> None:
             `balance` for the per-member balance map.
         """
         client = get_client()
-        data = await client.ocs_get(f"{API_BASE}/projects/{project_id}")
+        data = await client.ocs_get(f"{API_BASE}/projects/{_pid(project_id)}")
         return json.dumps(data)
 
     @mcp.tool(annotations=READONLY)
@@ -103,7 +114,7 @@ def _register_project_reads(mcp: FastMCP) -> None:
             payerId=payer_id,
         )
         params["showDisabled"] = "1" if show_disabled else "0"
-        data = await client.ocs_get(f"{API_BASE}/projects/{project_id}/statistics", params=params)
+        data = await client.ocs_get(f"{API_BASE}/projects/{_pid(project_id)}/statistics", params=params)
         return json.dumps(data)
 
     @mcp.tool(annotations=READONLY)
@@ -133,7 +144,7 @@ def _register_project_reads(mcp: FastMCP) -> None:
         client = get_client()
         params = _body(centeredOn=centered_on, maxTimestamp=max_timestamp)
         data = await client.ocs_get(
-            f"{API_BASE}/projects/{project_id}/settlement",
+            f"{API_BASE}/projects/{_pid(project_id)}/settlement",
             params=params or None,
         )
         return json.dumps(data)
@@ -161,7 +172,7 @@ def _register_member_reads(mcp: FastMCP) -> None:
         """
         client = get_client()
         params = {"lastChanged": last_changed} if last_changed is not None else None
-        data = await client.ocs_get(f"{API_BASE}/projects/{project_id}/members", params=params)
+        data = await client.ocs_get(f"{API_BASE}/projects/{_pid(project_id)}/members", params=params)
         return json.dumps(data)
 
 
@@ -223,7 +234,7 @@ def _register_bill_reads(mcp: FastMCP) -> None:
         )
         params["deleted"] = deleted
         params["reverse"] = "true" if reverse else "false"
-        data = await client.ocs_get(f"{API_BASE}/projects/{project_id}/bills", params=params)
+        data = await client.ocs_get(f"{API_BASE}/projects/{_pid(project_id)}/bills", params=params)
         return json.dumps(data)
 
     @mcp.tool(annotations=READONLY)
@@ -239,12 +250,13 @@ def _register_bill_reads(mcp: FastMCP) -> None:
             JSON bill object: id, what (description), amount, payer_id,
             owers (list of member dicts who share the cost), owerIds (id list),
             date (YYYY-MM-DD), timestamp (Unix seconds), comment, categoryid,
-            paymentmodeid, repeat ("n"=none, "d"=daily, "w"=weekly, "m"=monthly,
-            "y"=yearly), repeatfreq, repeatallactive, repeatuntil, deleted
-            (0=live, 1=in trash), lastchanged.
+            paymentmodeid, repeat ("n"=none, "d"=daily, "w"=weekly,
+            "b"=biweekly, "s"=semi-monthly, "m"=monthly, "y"=yearly),
+            repeatfreq, repeatallactive, repeatuntil, deleted (0=live,
+            1=in trash), lastchanged.
         """
         client = get_client()
-        data = await client.ocs_get(f"{API_BASE}/projects/{project_id}/bills/{bill_id}")
+        data = await client.ocs_get(f"{API_BASE}/projects/{_pid(project_id)}/bills/{bill_id}")
         return json.dumps(data)
 
 
@@ -291,13 +303,17 @@ def _register_project_writes(mcp: FastMCP) -> None:
         Args:
             project_id: String project id.
             name: New display name.
-            auto_export: Periodic CSV auto-export. "n"=none (default),
-                "d"=daily, "w"=weekly, "m"=monthly.
+            auto_export: Periodic CSV auto-export frequency. Same code set as
+                bill `repeat`: "n"=none (default), "d"=daily, "w"=weekly,
+                "b"=biweekly, "s"=semi-monthly, "m"=monthly, "y"=yearly.
             currency_name: Main currency name (free-form string, e.g. "EUR").
-            deletion_disabled: If True, members and bills cannot be deleted —
-                only soft-disabled / soft-trashed.
+            deletion_disabled: Stored as a hint flag (the Cospend frontend
+                hides delete buttons when set), but the API does NOT enforce
+                this — destructive tools still succeed. Use only for UI
+                signaling, not as a guarantee.
             category_sort: Default category ordering. "a"=alphabetical (default),
-                "m"=most used, "c"=custom (manual `order` field).
+                "m"=manual (custom `order` field), "u"=most used,
+                "r"=recently used.
             payment_mode_sort: Same options as category_sort, for payment modes.
             archived_ts: Unix timestamp marking the project as archived. Pass 0
                 to unarchive.
@@ -316,7 +332,7 @@ def _register_project_writes(mcp: FastMCP) -> None:
             paymentModeSort=payment_mode_sort,
             archivedTs=archived_ts,
         )
-        await client.ocs_put_json(f"{API_BASE}/projects/{project_id}", json_data=body)
+        await client.ocs_put_json(f"{API_BASE}/projects/{_pid(project_id)}", json_data=body)
         return json.dumps({"project_id": project_id, "updated": True})
 
 
@@ -350,7 +366,7 @@ def _register_member_writes(mcp: FastMCP) -> None:
         """
         client = get_client()
         body = _body(name=name, weight=weight, active=1 if active else 0, userId=user_id, color=color)
-        data = await client.ocs_post_json(f"{API_BASE}/projects/{project_id}/members", json_data=body)
+        data = await client.ocs_post_json(f"{API_BASE}/projects/{_pid(project_id)}/members", json_data=body)
         return json.dumps(data)
 
     @mcp.tool(annotations=ADDITIVE_IDEMPOTENT)
@@ -390,7 +406,7 @@ def _register_member_writes(mcp: FastMCP) -> None:
         client = get_client()
         body = _body(name=name, weight=weight, activated=activated, color=color, userId=user_id)
         data = await client.ocs_put_json(
-            f"{API_BASE}/projects/{project_id}/members/{member_id}",
+            f"{API_BASE}/projects/{_pid(project_id)}/members/{member_id}",
             json_data=body,
         )
         return json.dumps(data)
@@ -467,7 +483,7 @@ def _register_bill_writes(mcp: FastMCP) -> None:
             repeatFreq=repeat_freq,
             repeatUntil=repeat_until,
         )
-        bill_id = await client.ocs_post_json(f"{API_BASE}/projects/{project_id}/bills", json_data=body)
+        bill_id = await client.ocs_post_json(f"{API_BASE}/projects/{_pid(project_id)}/bills", json_data=body)
         return json.dumps({"bill_id": bill_id})
 
     @mcp.tool(annotations=ADDITIVE_IDEMPOTENT)
@@ -540,7 +556,7 @@ def _register_bill_writes(mcp: FastMCP) -> None:
             deleted=deleted,
         )
         result = await client.ocs_put_json(
-            f"{API_BASE}/projects/{project_id}/bills/{bill_id}",
+            f"{API_BASE}/projects/{_pid(project_id)}/bills/{bill_id}",
             json_data=body,
         )
         return json.dumps({"bill_id": result})
@@ -552,9 +568,9 @@ def _register_destructive_tools(mcp: FastMCP) -> None:
     async def delete_cospend_project(project_id: str) -> str:
         """Delete a Cospend project and all its members, bills, and shares.
 
-        Requires ADMIN access. If the project has `deletionDisabled` set,
-        this returns an error — clear that flag first via
-        update_cospend_project.
+        Requires ADMIN access on the project. The Cospend API does not honor
+        the project's `deletionDisabled` flag (it's a frontend hint only), so
+        this irrevocably removes everything regardless.
 
         Args:
             project_id: String project id.
@@ -563,7 +579,7 @@ def _register_destructive_tools(mcp: FastMCP) -> None:
             JSON {"project_id": ..., "message": "DELETED"}.
         """
         client = get_client()
-        await client.ocs_delete(f"{API_BASE}/projects/{project_id}")
+        await client.ocs_delete(f"{API_BASE}/projects/{_pid(project_id)}")
         return json.dumps({"project_id": project_id, "message": "DELETED"})
 
     @mcp.tool(annotations=DESTRUCTIVE)
@@ -583,7 +599,7 @@ def _register_destructive_tools(mcp: FastMCP) -> None:
             JSON {"project_id": ..., "member_id": ..., "deleted": true}.
         """
         client = get_client()
-        await client.ocs_delete(f"{API_BASE}/projects/{project_id}/members/{member_id}")
+        await client.ocs_delete(f"{API_BASE}/projects/{_pid(project_id)}/members/{member_id}")
         return json.dumps({"project_id": project_id, "member_id": member_id, "deleted": True})
 
     @mcp.tool(annotations=DESTRUCTIVE)
@@ -607,7 +623,7 @@ def _register_destructive_tools(mcp: FastMCP) -> None:
         """
         client = get_client()
         await client.ocs_delete(
-            f"{API_BASE}/projects/{project_id}/bills/{bill_id}?moveToTrash={'true' if move_to_trash else 'false'}"
+            f"{API_BASE}/projects/{_pid(project_id)}/bills/{bill_id}?moveToTrash={'true' if move_to_trash else 'false'}"
         )
         return json.dumps({"project_id": project_id, "bill_id": bill_id, "moved_to_trash": move_to_trash})
 

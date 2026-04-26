@@ -135,6 +135,21 @@ class TestProjectLifecycle:
         with pytest.raises((ToolError, NextcloudError)):
             await nc_mcp.call("get_cospend_project", project_id="mcp-test-does-not-exist")
 
+    @pytest.mark.asyncio
+    async def test_project_id_with_space_round_trips(self, nc_mcp: McpTestHelper) -> None:
+        """Cospend allows spaces in project ids — verify URL-encoding so subsequent ops don't 404."""
+        pid = "mcp-test with space"
+        created = await _make_project(nc_mcp, pid, "Spaced")
+        assert created["id"] == pid
+        fetched = json.loads(await nc_mcp.call("get_cospend_project", project_id=pid))
+        assert fetched["id"] == pid
+        member = await _make_member(nc_mcp, pid, "Alice")
+        bob = await _make_member(nc_mcp, pid, "Bob")
+        bill_id = await _make_bill(nc_mcp, pid, "Pizza", 10.0, member["id"], [member["id"], bob["id"]])
+        bill = json.loads(await nc_mcp.call("get_cospend_bill", project_id=pid, bill_id=bill_id))
+        assert bill["amount"] == 10.0
+        await nc_mcp.call("delete_cospend_project", project_id=pid)
+
 
 class TestMembers:
     @pytest.mark.asyncio

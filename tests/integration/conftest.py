@@ -4,6 +4,7 @@ import contextlib
 import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
+from urllib.parse import quote
 
 import pytest
 from mcp.server.fastmcp import FastMCP
@@ -223,9 +224,9 @@ async def _cleanup_cospend(client: NextcloudClient) -> None:
         projects: list[dict[str, object]] = await client.ocs_get("apps/cospend/api/v1/projects")
         for project in projects or []:
             project_id = str(project.get("id", ""))
-            if project_id.startswith("mcp-test-"):
+            if project_id.startswith("mcp-test"):
                 with contextlib.suppress(Exception):
-                    await client.ocs_delete(f"apps/cospend/api/v1/projects/{project_id}")
+                    await client.ocs_delete(f"apps/cospend/api/v1/projects/{quote(project_id, safe='')}")
 
 
 async def _cleanup(client: NextcloudClient) -> None:
